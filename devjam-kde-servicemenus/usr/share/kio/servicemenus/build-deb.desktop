@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+Icon=system-software-install
+MimeType=inode/directory;
+Actions=buildDeb;
+X-KDE-Priority=TopLevel
+
+[Desktop Action buildDeb]
+Name=Build .deb package(s) in dist/
+Icon=system-software-install
+Exec=build-deb-package %F
