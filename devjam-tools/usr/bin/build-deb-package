@@ -1,0 +1,29 @@
+#!/bin/bash
+set -euo pipefail
+
+if [ "$#" -eq 0 ]; then
+    notify-send -u critical "Debian Build" "No directories selected."
+    exit 1
+fi
+
+built_count=0
+
+for dir in "$@"; do
+    dir_path="$(realpath "$dir")"
+
+    # Check if the selected directory contains a DEBIAN/ folder
+    if [ -d "$dir_path/DEBIAN" ]; then
+        parent_dir="$(dirname "$dir_path")"
+        dist_dir="$parent_dir/dist"
+
+        mkdir -p "$dist_dir"
+        dpkg-deb --root-owner-group -Zzstd --build "$dir_path" "$dist_dir"
+        built_count=$((built_count + 1))
+    fi
+done
+
+if [ "$built_count" -gt 0 ]; then
+    notify-send -i system-software-install "Debian Build Completed" "$built_count package(s) built in dist/"
+else
+    notify-send -u critical -i dialog-warning "Debian Build" "No valid package directories (containing a DEBIAN/ folder) found."
+fi
