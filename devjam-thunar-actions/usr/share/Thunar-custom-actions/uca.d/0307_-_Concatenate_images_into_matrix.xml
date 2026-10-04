@@ -1,0 +1,8 @@
+<action>
+	<icon>x-shape-image</icon>
+	<name>Concatenate images into matrix</name>
+	<command>montage %F -mode Concatenate %f.png</command>
+	<description>Concatenate images into matrix</description>
+	<patterns>*</patterns>
+	<image-files/>
+</action>

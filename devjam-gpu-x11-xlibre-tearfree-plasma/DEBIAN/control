@@ -1,0 +1,8 @@
+Package: devjam-gpu-x11-xlibre-tearfree-plasma
+Version: 1.4-3
+Section: x11
+Priority: optional
+Architecture: all
+Recommends: xlibre
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Disable sync to vblank at kwin, let modesetting handle vsync/tearfree. Applies to the modesetting driver from XLibre or latest unreleased Xorg.

@@ -1,0 +1,135 @@
+#!/bin/bash
+# Convert audio files between mono and stereo using sox.
+# Usage: audio-channel-convert [--stereo|--mono] <audio_file1> [<audio_file2> ...]
+# Default conversion is to stereo if no flag is specified.
+set -euo pipefail
+
+command -v sox >/dev/null || { echo "Error: sox not installed" >&2; exit 1; }
+command -v soxi >/dev/null || { echo "Error: soxi not installed" >&2; exit 1; }
+
+# Detect once whether a terminal is available for the overwrite prompt below.
+# A bare `read` under `set -e` aborts the whole batch on EOF (e.g. run from
+# cron or with stdin redirected) instead of just skipping the one conflict -
+# so without a terminal, fall back to always skipping conflicting files.
+interactive=1
+{ [ -t 0 ] && [ -t 1 ]; } || interactive=0
+
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 [--stereo|--mono] <audio_file1> [<audio_file2> ...]" >&2
+    exit 1
+fi
+
+mode="stereo"
+
+case "$1" in
+    --stereo)
+        mode="stereo"
+        shift
+        ;;
+    --mono)
+        mode="mono"
+        shift
+        ;;
+    --*)
+        echo "Error: Unknown option '$1'. Use --stereo or --mono." >&2
+        exit 1
+        ;;
+esac
+
+if [ $# -eq 0 ]; then
+    echo "Error: No input files specified." >&2
+    exit 1
+fi
+
+if [ "$mode" = "stereo" ]; then
+    target_channels=2
+    output_dir="mono2stereo"
+else
+    target_channels=1
+    output_dir="stereo2mono"
+fi
+
+mkdir -p "$output_dir" || { echo "Error: Failed to create directory '$output_dir'" >&2; exit 1; }
+
+success_count=0
+error_count=0
+
+for input_file in "$@"; do
+    if [ ! -r "$input_file" ]; then
+        echo "Error: '$input_file' does not exist or is not readable" >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    if [[ ! "$input_file" =~ \.(mp3|wav|flac|ogg)$ ]]; then
+        echo "Warning: '$input_file' may not be a supported audio file" >&2
+    fi
+
+    if ! channels=$(soxi -c "$input_file" 2>/dev/null); then
+        echo "Error: Failed to read audio info for '$input_file'" >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    if [ "$channels" -eq "$target_channels" ]; then
+        echo "Skipping '$input_file': already has $channels channel(s)." >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    base_name=$(basename "$input_file")
+    output_file="${output_dir}/${base_name}"
+
+    # Interactive overwrite prompt
+    if [ -e "$output_file" ]; then
+        if [ "$interactive" -eq 1 ]; then
+            echo ""
+            echo "'$output_file' already exists."
+            read -r -p "Overwrite (o) / Skip (s) / Cancel entire batch (c)? " answer
+            case "$answer" in
+                o|O) : ;;
+                s|S) continue ;;
+                c|C) echo "Conversion cancelled."; exit 1 ;;
+                *) echo "Unrecognised answer, skipping '$input_file'." >&2; continue ;;
+            esac
+        else
+            echo "Skipping '$input_file': '$output_file' already exists (no terminal available to confirm)." >&2
+            error_count=$((error_count + 1))
+            continue
+        fi
+    fi
+
+    if [ ! -w "$output_dir" ]; then
+        echo "Error: No write permission in '$output_dir'" >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    # Write to a temp file first and rename into place, so a failed/interrupted
+    # conversion never leaves a partial file at the final path. Keep the real
+    # extension on the temp file so sox still detects the output format.
+    ext="${base_name##*.}"
+    tmp_file=$(mktemp --suffix=".${ext}" "${output_dir}/.tmp.XXXXXX") || {
+        echo "Error: Failed to create temp file in '$output_dir'" >&2
+        error_count=$((error_count + 1))
+        continue
+    }
+    # mktemp creates files at mode 0600; restore the usual umask-based permissions
+    chmod "$(printf '%o' $((0666 & ~$(umask))))" "$tmp_file"
+
+    echo "Converting '$input_file' to $mode ($target_channels channel(s)) as '$output_file'..."
+
+    if sox "$input_file" "$tmp_file" channels "$target_channels" 2>/dev/null && mv -n "$tmp_file" "$output_file"; then
+        echo "✅ Success: Converted '$input_file'"
+        echo ""
+        success_count=$((success_count + 1))
+    else
+        echo "❌ Error: Failed to convert '$input_file'" >&2
+        echo ""
+        rm -f "$tmp_file"
+        error_count=$((error_count + 1))
+    fi
+done
+
+echo "Completed: $success_count file(s) converted, $error_count error(s)"
+exit $(( error_count > 255 ? 255 : error_count ))

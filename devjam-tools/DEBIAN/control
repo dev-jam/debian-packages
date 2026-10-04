@@ -1,0 +1,33 @@
+Package: devjam-tools
+Version: 1.85-2
+Section: utils
+Priority: optional
+Architecture: all
+Recommends: sox,
+ flac,
+ wl-clipboard,
+ packaging-dev,
+ debian-keyring,
+ devscripts,
+ equivs,
+ cfourcc,
+ jdupes,
+ fclones,
+ live-build,
+ ffmpeg,
+ imagemagick,
+ mediainfo,
+ mkvtoolnix,
+ rsync,
+ perl,
+ tar,
+ linux-cpupower,
+ dkms,
+ util-linux,
+ debsecan,
+ genisoimage,
+ csvtool,
+ libevtx-utils,
+ systemd-container
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: personal tools for Debian

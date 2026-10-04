@@ -1,0 +1,23 @@
+#!/bin/sh
+# Run Matlab with the Psychtoolbox for a given .m file
+# Usage: matlab-run-cli-exp <file.m>
+
+file="$1"
+
+if [ -z "$file" ]; then
+    echo "Usage: $0 <file.m>"
+    exit 1
+fi
+
+echo "Running Matlab with Psychtoolbox (nogui, nodesktop) on: $file"
+echo
+
+# Run Matlab interactively; Ctrl+C is handled by Matlab itself
+ptb3-matlab -nosplash -nodesktop -r "run('${file}')"
+
+
+# After Matlab exits, show message (no pause needed)
+echo
+echo "Matlab has exited."
+exit 0
+

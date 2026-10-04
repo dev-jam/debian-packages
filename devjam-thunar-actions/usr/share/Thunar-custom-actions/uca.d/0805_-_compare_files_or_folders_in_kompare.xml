@@ -1,0 +1,10 @@
+<action>
+	<icon>kompare</icon>
+	<name>Compare files or folders in Kompare</name>
+	<command>kompare %F</command>
+	<description>Compare files or folders in Kompare</description>
+	<patterns>*</patterns>
+	<directories/>
+	<other-files/>
+	<text-files/>
+</action>

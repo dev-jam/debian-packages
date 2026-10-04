@@ -1,0 +1,8 @@
+<action>
+	<icon>media-cdrom</icon>
+	<name>Convert IMG to ISO</name>
+	<command>ccd2iso %f %f.iso</command>
+	<description>Convert IMG to ISO</description>
+	<patterns>*.img;*.IMG</patterns>
+	<other-files/>
+</action>

@@ -1,0 +1,8 @@
+#!/bin/sh
+
+systemctl --user unmask pipewire.service
+systemctl --user unmask pipewire.socket
+
+systemctl --user unmask pipewire-pulse.service
+systemctl --user unmask pipewire-pulse.socket
+

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=14
+Icon=question
+MimeType=inode/directory;
+Actions=monitorFolderForActivity
+X-KDE-Priority=TopLevel
+
+[Desktop Action monitorFolderForActivity]
+Name=Monitor folder recursively for any activity
+Icon=question
+Exec=konsole --hide-menubar --hide-tabbar -e inotifywait -m -r %u

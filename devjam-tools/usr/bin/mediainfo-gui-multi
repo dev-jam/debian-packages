@@ -1,0 +1,4 @@
+#!/bin/sh
+for inpath in "$@"; do
+   mediainfo-gui "${inpath}" &
+done

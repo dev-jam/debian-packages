@@ -1,0 +1,8 @@
+Package: devjam-science-experiment-mode-rtirq
+Version: 1.44-3
+Section: science
+Priority: optional
+Architecture: all
+Recommends: rtirq
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Experiment mode with IRQ priority order optimized for deterministic human-EEG, buttonbox and audio visual timing

@@ -1,0 +1,8 @@
+# Build output
+dist/
+*.deb
+
+# Temporary and log files
+*.log
+*.tmp
+.DS_Store

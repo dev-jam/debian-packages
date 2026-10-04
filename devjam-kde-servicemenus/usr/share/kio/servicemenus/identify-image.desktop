@@ -1,0 +1,18 @@
+#IdentifyImage
+#version 1.0
+#author contact email: piotr4@gmail.com
+#
+[Desktop Entry]
+Type=Service
+InitialPreference=28
+Icon=edit-image-face-recognize
+MimeType=image/*;
+Actions=IdentifyImage;
+X-KDE-Priority=TopLevel
+X-KDE-StartupNotify=false
+
+[Desktop Action IdentifyImage]
+Icon=edit-image-face-recognize
+Name=Identify Image
+Exec=bash -c 'imq=$(identify "%u"); imv=$(identify -verbose "%u"); imall="${imq}\n\nDetails:\n${imv}"; kdialog --title "Identify Image" --textbox /dev/stdin <<< $imall 450 580;'; 
+#kdialog --title "Identify Image" --detailedsorry "$imq" "$imv"

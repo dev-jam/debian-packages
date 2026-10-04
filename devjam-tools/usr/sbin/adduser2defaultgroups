@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Target username
+USERNAME="$1"
+
+# Create the user first if it does not exist
+if ! id "$USERNAME" &>/dev/null; then
+    useradd -m "$USERNAME"
+fi
+
+# List of target groups
+GROUPS_LIST=(
+    "audio"
+    "bluetooth"
+    "cdrom"
+    "dialout"
+    "dip"
+    "floppy"
+    "lp"
+    "lpadmin"
+    "netdev"
+    "pipewire"
+    "plugdev"
+    "saned"
+    "scanner"
+    "systemd-journal"
+    "sudo"
+    "users"
+    "video"
+    "monitoring"
+    "psychopy"
+    "psychtoolbox"
+    
+)
+
+# Iterate over the list and add user only to existing groups
+for group in "${GROUPS_LIST[@]}"; do
+    if getent group "$group" >/dev/null 2>&1; then
+        usermod -aG "$group" "$USERNAME"
+    fi
+done

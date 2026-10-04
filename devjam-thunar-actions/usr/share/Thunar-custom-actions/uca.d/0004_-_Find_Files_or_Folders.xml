@@ -1,0 +1,8 @@
+<action>
+	<icon>gtk-find</icon>
+	<name>Find Files or Folders</name>
+	<command>catfish --hidden %f</command>
+	<description>Find files or folders</description>
+	<patterns>*</patterns>
+	<directories/>
+</action>

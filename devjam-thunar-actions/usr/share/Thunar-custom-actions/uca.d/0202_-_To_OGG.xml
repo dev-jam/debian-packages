@@ -1,0 +1,8 @@
+<action>
+	<icon>audio-speakers</icon>
+	<name>To OGG</name>
+	<command>pacpl --to OGG --gui %F</command>
+	<description>To OGG</description>
+	<patterns>*</patterns>
+	<audio-files/>
+</action>

@@ -1,0 +1,7 @@
+Package: devjam-desktop-kernel-hardening
+Version: 1.0-3
+Section: admin
+Priority: optional
+Architecture: all
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Desktop kernel hardening

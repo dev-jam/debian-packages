@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prevent running script directly as root (but allow internal sudo re-exec)
+if [[ $EUID -eq 0 && -z "${AFFINITY_INTERNAL:-}" ]]; then
+    echo -e "\033[31mError:\033[0m Do not run this script with sudo or as root."
+    echo "       Run it as a normal user. By default it sets a user override."
+    echo "       When --system is passed, it will use sudo internally."
+    exit 1
+fi
+
+SERVICE="opensesame-psychopy-rt.service"
+OVERRIDE="cpu-affinity.conf"
+
+# Colors
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    BOLD="\033[1m"
+    BLUE="\033[34m"
+    GREEN="\033[32m"
+    YELLOW="\033[33m"
+    RED="\033[31m"
+    GRAY="\033[90m"
+    RESET="\033[0m"
+else
+    BOLD=""; BLUE=""; GREEN=""; YELLOW=""; RED=""; GRAY=""; RESET=""
+fi
+
+color_lines() { local color="$1"; while IFS= read -r line; do printf "\t${color}%s${RESET}\n" "$line"; done; }
+
+usage() {
+    echo "Usage: $0 [--show] [--disable] [--user|--system] [CPU-LIST]"
+    echo
+    echo "Examples:"
+    echo "  $0 2,3,4,5                 # Set user override (default)"
+    echo "  $0 --system 2-5            # Set system override (uses sudo internally)"
+    echo "  $0 --disable               # Remove user override"
+    echo "  $0 --disable --system      # Remove system override (uses sudo internally)"
+    echo "  $0 --show                  # Show all overrides and effective setting"
+    exit 1
+}
+
+# Expand CPU ranges: 2-5,7 → 2,3,4,5,7
+expand_cpus() {
+    local input="$1" result=()
+    IFS=',' read -ra parts <<< "$input"
+    for p in "${parts[@]}"; do
+        if [[ "$p" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            start=${BASH_REMATCH[1]} end=${BASH_REMATCH[2]}
+            ((start>end)) && { echo -e "${RED}Error:${RESET} Invalid range $p"; exit 1; }
+            for ((i=start;i<=end;i++)); do result+=("$i"); done
+        elif [[ "$p" =~ ^[0-9]+$ ]]; then
+            result+=("$p")
+        else
+            echo -e "${RED}Error:${RESET} Invalid CPU entry '$p'"; exit 1
+        fi
+    done
+    IFS=','; echo "${result[*]}"
+}
+
+# Determine paths
+get_paths() {
+    SYS_PATH="/etc/systemd/user/$SERVICE.d/$OVERRIDE"
+
+    if [[ -n "${SUDO_USER:-}" ]]; then
+        REAL_USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    else
+        REAL_USER_HOME="$HOME"
+    fi
+    USER_PATH="$REAL_USER_HOME/.config/systemd/user/$SERVICE.d/$OVERRIDE"
+}
+
+# Show current overrides and effective setting
+show_current() {
+    get_paths
+
+    echo; echo -e "${BOLD}${BLUE}=== Override status for $SERVICE ===${RESET}"; echo
+
+    # System override first
+    if [[ -f "$SYS_PATH" ]]; then
+        echo -e "[system override] ${GRAY}$SYS_PATH${RESET}:"
+        grep -E '^CPUAffinity' "$SYS_PATH" | color_lines "$GREEN" || echo -e "\t(No CPUAffinity set)"
+    else
+        echo -e "[system override] ${RED}No override file${RESET} ($SYS_PATH)"
+    fi
+    echo
+
+    # User override second
+    if [[ -f "$USER_PATH" ]]; then
+        echo -e "[user override] ${GRAY}$USER_PATH${RESET}:"
+        grep -E '^CPUAffinity' "$USER_PATH" | color_lines "$GREEN" || echo -e "\t(No CPUAffinity set)"
+    else
+        echo -e "[user override] ${RED}No override file${RESET} ($USER_PATH)"
+    fi
+    echo
+
+    # Precedence warning (only if both exist)
+    if [[ -f "$USER_PATH" && -f "$SYS_PATH" ]]; then
+        echo -e "⚠️  ${YELLOW}Note: user override takes precedence over system override${RESET}"
+        echo -e "    ${GRAY}(system override is shown for completeness)${RESET}"; echo
+    fi
+
+    # Effective active setting (winning override)
+    echo -e "${BOLD}${BLUE}=== Effective active setting ===${RESET}"; echo
+
+    effective=""
+    if [[ -f "$USER_PATH" ]]; then
+        effective=$(grep -E '^CPUAffinity' "$USER_PATH" | cut -d= -f2)
+    elif [[ -f "$SYS_PATH" ]]; then
+        effective=$(grep -E '^CPUAffinity' "$SYS_PATH" | cut -d= -f2)
+    fi
+
+    if [[ -n "$effective" ]]; then
+        expanded=$(expand_cpus "$effective")
+        echo -e "\t${GREEN}CPUAffinity=$expanded${RESET}"
+    else
+        echo -e "\t${RED}(none)${RESET}"
+    fi
+
+    # Legend
+    echo; echo -e "${BOLD}${BLUE}Legend:${RESET}"
+    echo -e "  ${GREEN}Green${RESET}: effective CPUAffinity value"
+    echo -e "  ${RED}Red${RESET}: missing override file"
+    echo -e "  ${YELLOW}Yellow${RESET}: warnings about precedence"
+    echo -e "  ${GRAY}Gray${RESET}: file paths and context notes"
+}
+
+# Set affinity override
+set_affinity() {
+    local mode="$1" cpus="$2"
+    local target_dir override_path
+
+    if [[ "$mode" == "system" ]]; then
+        target_dir="/etc/systemd/user/$SERVICE.d"
+        override_path="$target_dir/$OVERRIDE"
+        [[ $EUID -ne 0 ]] && exec sudo AFFINITY_INTERNAL=1 "$0" --system "$cpus"
+    else
+        target_dir="$HOME/.config/systemd/user/$SERVICE.d"
+        override_path="$target_dir/$OVERRIDE"
+    fi
+
+    cpus=$(expand_cpus "$cpus")
+
+    # Show reference override (system path only, no misleading precedence)
+    if [[ "$mode" == "user" && -f "/etc/systemd/user/$SERVICE.d/$OVERRIDE" ]]; then
+        echo -e "⚠️  Note: another override exists at /etc/systemd/user/$SERVICE.d/$OVERRIDE"
+        echo -e "    (system override is shown for completeness)\n"
+    fi
+
+    mkdir -p "$target_dir"
+    cat >"$override_path" <<EOF
+[Service]
+CPUAffinity=$cpus
+EOF
+    echo -e "${GREEN}Set $mode affinity to: $cpus${RESET}"
+    echo -e "Override written to: $override_path"; echo
+
+    show_current
+}
+
+disable_override() {
+    local mode="$1"
+    local target_dir override_path
+
+    if [[ "$mode" == "system" ]]; then
+        target_dir="/etc/systemd/user/$SERVICE.d"
+        override_path="$target_dir/$OVERRIDE"
+        [[ $EUID -ne 0 ]] && exec sudo AFFINITY_INTERNAL=1 "$0" --system --disable
+    else
+        target_dir="$HOME/.config/systemd/user/$SERVICE.d"
+        override_path="$target_dir/$OVERRIDE"
+    fi
+
+    if [[ -f "$override_path" ]]; then
+        rm -f "$override_path"
+        echo -e "${RED}Removed $mode override ($override_path)${RESET}"; echo
+    else
+        echo -e "${RED}No $mode override file to remove.${RESET}"; echo
+    fi
+
+    show_current
+}
+
+# --- Main ---
+MODE="user"      # default
+ACTION=""        # none by default
+ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --user) MODE="user"; shift ;;
+        --system) MODE="system"; shift ;;
+        --show) ACTION="show"; shift ;;
+        --disable) ACTION="disable"; shift ;;
+        *) ARGS+=("$1"); shift ;;
+    esac
+done
+
+# Execute based on ACTION
+case "$ACTION" in
+    show) show_current; exit 0 ;;
+    disable) disable_override "$MODE"; exit 0 ;;
+esac
+
+if [[ ${#ARGS[@]} -eq 0 ]]; then usage; fi
+
+CPU_LIST="${ARGS[0]}"
+[[ "$CPU_LIST" =~ ^[0-9,-]+$ ]] || { echo -e "${RED}Error:${RESET} Invalid CPU list '$CPU_LIST'"; usage; }
+
+set_affinity "$MODE" "$CPU_LIST"

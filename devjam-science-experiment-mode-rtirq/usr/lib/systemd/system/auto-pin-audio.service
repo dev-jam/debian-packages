@@ -1,0 +1,12 @@
+[Unit]
+Description=Auto-pin audio IRQs to isolated cores
+After=systemd-udev-settle.service sound.target
+ConditionPathExists=/usr/bin/auto-pin-audio-irq
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/auto-pin-audio-irq
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

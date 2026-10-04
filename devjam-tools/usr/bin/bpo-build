@@ -1,0 +1,308 @@
+#!/bin/bash
+
+# Create deb packages using apt source
+#
+# Requires: $chroot_mode = 'unshare'; and $clean_source = 0; in ~/.sbuildrc
+# (the latter avoids sbuild running dpkg-buildpackage's clean target on the
+# host before handing the tree to the chroot, which would otherwise check
+# build-deps against the host and fail).
+
+set -euo pipefail
+nproc_count=$(nproc)
+
+# Target for the actual build: the stable/testing release you are
+# backporting FOR (build-deps come from here + BUILD_SUITE-backports).
+# This is deliberately independent of SUITE below, which only controls
+# where the *source* is fetched from.
+BUILD_SUITE="trixie"
+
+# Default suite to fetch source from
+SUITE="unstable"
+
+# How to fetch the source: "apt" (default, needs deb-src enabled) or "dgit"
+# (needs no deb-src, but needs git + the dgit-repos infrastructure).
+FETCH_METHOD="apt"
+
+# If set (via --revision=N), overrides the backport build number that
+# "dch --bpo" appends (the digits after the last "+" in the ~bpoXX+N
+# suffix, e.g. the "1" in "1.2.3-1~bpo13+1"). Useful when rebuilding the
+# same upstream version again for a repo that already has ~bpo13+N in it.
+REVISION=""
+
+# Whether to pause before each build so you can inspect/edit the source
+# first. Off by default -- turn on with --pause.
+PAUSE=0
+
+# Comma-separated package names (e.g. debhelper) to allow from unstable,
+# for when debian/control needs a build-tool version that only exists
+# there (e.g. debhelper-compat = 14 on trixie, which only ships 13.x).
+# unstable itself is pinned to -1 (never installable) except for exactly
+# these packages, pinned high -- so nothing else can leak in from it.
+# ("apt-get install -t unstable" was tried first and rejected: -t sets
+# the candidate preference for the whole transaction, not just the named
+# package, and pulled in a large chunk of unstable -- glibc, openssl,
+# python3 -- instead of just debhelper.)
+# This is safe for actual *build tools* (debhelper, dh-sequence-*, etc.):
+# they never appear in the built .deb's own Depends:, unlike a library.
+ALLOW_UNSTABLE=""
+
+# Check if required tools are installed (needed regardless of fetch method)
+command -v dch >/dev/null || { echo "Error: dch not installed" >&2; exit 1; }
+command -v sbuild >/dev/null || { echo "Error: sbuild not installed" >&2; exit 1; }
+command -v dpkg-parsechangelog >/dev/null || { echo "Error: dpkg-parsechangelog not installed" >&2; exit 1; }
+command -v base64 >/dev/null || { echo "Error: base64 not installed" >&2; exit 1; }
+
+# Parse optional suite flags
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --stable)
+            SUITE="stable"
+            shift
+            ;;
+        --testing)
+            SUITE="testing"
+            shift
+            ;;
+        --unstable)
+            SUITE="unstable"
+            shift
+            ;;
+        --experimental)
+            SUITE="experimental"
+            shift
+            ;;
+        --dgit)
+            FETCH_METHOD="dgit"
+            shift
+            ;;
+        --apt)
+            FETCH_METHOD="apt"
+            shift
+            ;;
+        --revision=*)
+            REVISION="${1#*=}"
+            if ! [[ "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: --revision needs a positive integer, got '$REVISION'" >&2
+                exit 1
+            fi
+            shift
+            ;;
+        --pause)
+            PAUSE=1
+            shift
+            ;;
+        --allow-unstable=*)
+            ALLOW_UNSTABLE="${1#*=}"
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "Error: Unknown option $1" >&2
+            echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] <package1> [<package2> ...]" >&2
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# Check if at least one package argument is provided
+[ $# -eq 0 ] && { echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] <package1> [<package2> ...]" >&2; exit 1; }
+
+# Tool check specific to the chosen fetch method
+case "$FETCH_METHOD" in
+    apt)
+        command -v apt >/dev/null || { echo "Error: apt not installed" >&2; exit 1; }
+        ;;
+    dgit)
+        command -v dgit >/dev/null || { echo "Error: dgit not installed" >&2; exit 1; }
+        ;;
+esac
+
+home_dir="$HOME/build/bpo/$(date +%Y-%m-%d_%H.%M.%S)"
+mkdir -p "$home_dir" && cd "$home_dir"
+echo "Target suite: $SUITE"
+echo "Fetch method: $FETCH_METHOD"
+[ -n "$REVISION" ] && echo "Backport revision: ~bpoXX+$REVISION"
+[ "$PAUSE" -eq 1 ] && echo "Pause before build: on"
+[ -n "$ALLOW_UNSTABLE" ] && echo "From unstable (only): $ALLOW_UNSTABLE"
+echo "Creating deb packages for: $*"
+
+success_count=0
+error_count=0
+
+for package in "$@"; do
+    echo "Processing '$package' from suite '$SUITE'..."
+    mkdir -p "$package" && cd "$package"
+
+    if [ "$FETCH_METHOD" = "dgit" ]; then
+        # dgit clone talks to the dgit-repos server + archive directly, so
+        # it needs no deb-src entries in sources.list. It leaves a normal
+        # git working tree, which sbuild consumes exactly like a directory
+        # unpacked by apt source.
+        if ! dgit clone "$package" "$SUITE" "${package}-${SUITE}" 2>/dev/null; then
+            echo "❌ Error: Failed to dgit-clone '$package' ($SUITE)" >&2
+            error_count=$((error_count + 1))
+            cd "$home_dir"
+            continue
+        fi
+        if ! cd "${package}-${SUITE}"; then
+            echo "❌ Error: Could not enter source directory for '$package'" >&2
+            error_count=$((error_count + 1))
+            cd "$home_dir"
+            continue
+        fi
+    else
+        # Download source from specified suite
+        if ! apt source "$package/$SUITE" 2>/dev/null; then
+            echo "❌ Error: Failed to download source for '$package' ($SUITE)" >&2
+            error_count=$((error_count + 1))
+            cd "$home_dir"
+            continue
+        fi
+
+        # Navigate into extracted directory (nullglob so an unmatched pattern
+        # expands to nothing instead of the literal string, and so we can detect
+        # "no match" vs "more than one match" explicitly rather than letting cd
+        # fail on multiple arguments)
+        shopt -s nullglob
+        extracted_dirs=("${package}"-*)
+        shopt -u nullglob
+
+        if [ "${#extracted_dirs[@]}" -ne 1 ] || ! cd "${extracted_dirs[0]}"; then
+            echo "❌ Error: Could not enter source directory for '$package'" >&2
+            error_count=$((error_count + 1))
+            cd "$home_dir"
+            continue
+        fi
+    fi
+
+    # Bump changelog for the backport
+    dch --bpo ""
+
+    if [ -n "$REVISION" ]; then
+        current_version=$(dpkg-parsechangelog -S Version)
+        current_distribution=$(dpkg-parsechangelog -S Distribution)
+        # Replace the "+N" backport build number that "dch --bpo" just
+        # appended (e.g. "1.2.3-1~bpo13+1" -> "1.2.3-1~bpo13+$REVISION").
+        if [[ "$current_version" =~ ^(.*~bpo[0-9]+\+)[0-9]+$ ]]; then
+            new_version="${BASH_REMATCH[1]}${REVISION}"
+            # --distribution keeps it on trixie-backports; dch --newversion
+            # would otherwise default a new stanza's distribution to
+            # UNRELEASED, which lintian treats as an error, not a warning.
+            # --date guarantees a timestamp strictly later than the
+            # dch --bpo entry above; without it, both entries can land in
+            # the same second and lintian flags
+            # latest-changelog-entry-without-new-date as an error.
+            dch --newversion "$new_version" --distribution "$current_distribution" \
+                --date "$(date -R -d '+1 second')" \
+                "Rebuild with backport revision +$REVISION"
+        else
+            echo "⚠️  Warning: could not find a ~bpoXX+N suffix in '$current_version', skipping --revision for '$package'" >&2
+        fi
+    fi
+
+    if [ "$PAUSE" -eq 1 ]; then
+        echo ""
+        echo "Source is ready in: $PWD"
+        echo "You can now edit the source in another terminal, or bump the"
+        echo "version with: dch -i \"reason for change\"  (~bpo13+1 -> +2)"
+        echo ""
+        read -rp "Press Enter to build, or Ctrl+C to abort and build manually later... "
+    fi
+
+    # -d "$BUILD_SUITE" (plain trixie), not trixie-backports: sbuild's
+    # built-in distro_mangle *does* strip "-backports" and auto-inject a
+    # setup-hook adding that repo to the bootstrap -- but that auto-hook
+    # has no signed-by/keyring reference and fails apt's signature check
+    # while creating the chroot tarball. Our own --extra-repository below
+    # doesn't have that problem (sbuild wires it to the trusted archive
+    # keyring correctly), so we keep using it and accept that the
+    # generated .changes Distribution field says "trixie" instead of
+    # "trixie-backports" -- cosmetic for a locally built package.
+    sbuild_args=(-d "$BUILD_SUITE"
+        --extra-repository="deb http://deb.debian.org/debian ${BUILD_SUITE}-backports main"
+        --profiles=nocheck
+        -j"$nproc_count"
+        --build-dir="$home_dir")
+
+    if [ -n "$ALLOW_UNSTABLE" ]; then
+        pin_file="/etc/apt/preferences.d/99-unstable-allowlist"
+        # Pin by source package (src:name) rather than listing binaries --
+        # apt_preferences resolves this to every binary built from that
+        # source (e.g. src:debhelper covers both debhelper and
+        # libdebhelper-perl), so a version-locked sibling dependency like
+        # "debhelper Depends: libdebhelper-perl (= 14.5)" can't get stuck
+        # half-pinned because a sibling binary was left off the list.
+        src_pkglist=""
+        for pkg in ${ALLOW_UNSTABLE//,/ }; do
+            src_pkglist="${src_pkglist}src:${pkg} "
+        done
+        src_pkglist="${src_pkglist% }"
+
+        # Add the unstable source ourselves (chroot-setup-commands runs
+        # before sbuild wires up --extra-repository sources, so relying on
+        # that gave "unstable ... not available in the sources"). The
+        # trailing "&& echo ... && cat ..." isn't needed for the write
+        # itself -- it's there purely so the sbuild log's output for this
+        # hook shows the file it just wrote instead of just
+        # "I: Finished running '...'".
+        sbuild_args+=(--chroot-setup-commands="sh -c \"echo 'deb http://deb.debian.org/debian unstable main' > /etc/apt/sources.list.d/99-unstable.list && echo 'Added unstable apt source:' && echo && cat /etc/apt/sources.list.d/99-unstable.list && echo\"")
+
+        # Pin unstable to -1 (never installable) except for exactly the
+        # allow-listed packages, pinned high. NOT using "apt-get install
+        # -t unstable" here: -t sets the candidate preference for the
+        # whole transaction, not just the named package -- it pulled in a
+        # large chunk of unstable (glibc, openssl, python3...) rather than
+        # just debhelper.
+        #
+        # The preferences file is assembled here and shipped to the chroot
+        # as a single base64 blob, decoded on the other side -- that part
+        # has to stay a compact one-liner: an earlier attempt writing it
+        # as plain multi-line text (one --chroot-setup-commands per line,
+        # then a heredoc) either got mangled in transit or tripped
+        # sbuild's own percent-escape preprocessing, which treats a bare
+        # %s in a hook command as a hook token and silently replaces it
+        # with "bash -i </dev/tty...". base64 output never contains a
+        # literal "%", so it survives untouched.
+        # As above, the "&& echo ... && cat ..." tail is just so the
+        # actual preferences file shows up in the log's output section
+        # rather than the log showing only the base64 blob and "Finished
+        # running".
+        pin_content=$(printf '%s\n' \
+            "Package: *" "Pin: release a=unstable" "Pin-Priority: -1" "" \
+            "Package: ${src_pkglist}" "Pin: release a=unstable" "Pin-Priority: 990")
+        pin_content_b64=$(printf '%s' "$pin_content" | base64 -w0)
+
+        sbuild_args+=(--chroot-setup-commands="sh -c \"echo ${pin_content_b64} | base64 -d > ${pin_file} && echo 'Wrote unstable apt pin preferences:' && echo && cat ${pin_file} && echo\"")
+        sbuild_args+=(--chroot-setup-commands="apt-get update -qq")
+    fi
+
+    # Remember --allow-unstable one directory *above* the source tree
+    # (not inside it, so it never ends up in the actual .dsc/.diff.gz) --
+    # this is what lets "bpo-resume" pick the same pin back up later
+    # without the chroot itself (an ephemeral unshare session, rebuilt
+    # from the tarball every run) carrying any state between builds.
+    if [ -n "$ALLOW_UNSTABLE" ]; then
+        echo "$ALLOW_UNSTABLE" > ../.bpo-allow-unstable
+    else
+        rm -f ../.bpo-allow-unstable
+    fi
+
+    if sbuild "${sbuild_args[@]}" . 2>/dev/null; then
+        echo "✅ Success: Created deb package for '$package'"
+        success_count=$((success_count + 1))
+    else
+        echo "❌ Error: Failed to build deb package for '$package'" >&2
+        error_count=$((error_count + 1))
+    fi
+    cd "$home_dir"
+done
+
+# Print summary
+echo "Completed: $success_count package(s) built, $error_count error(s)"
+exit $(( error_count > 255 ? 255 : error_count ))

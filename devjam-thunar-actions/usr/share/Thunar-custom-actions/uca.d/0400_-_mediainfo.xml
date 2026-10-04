@@ -1,0 +1,9 @@
+<action>
+	<icon>drive-harddisk</icon>
+	<name>mediainfo</name>
+	<command>mediainfo-thunar %F</command>
+	<description>Shows media info</description>
+	<patterns>*</patterns>
+	<audio-files/>
+	<video-files/>
+</action>

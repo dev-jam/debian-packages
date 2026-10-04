@@ -1,0 +1,6 @@
+Name: Realtime Limits
+Default: yes
+Priority: 270
+Session-Type: Additional
+Session:
+	required	pam_limits.so

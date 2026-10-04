@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+	remove|purge)
+
+		# Apply sysctl settings if sysctl exists
+		if command -v sysctl >/dev/null 2>&1; then
+			sysctl --system || true
+		fi
+		;;
+esac
+
+exit 0

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+Icon=emblem-videos-symbolic
+MimeType=video/*;
+Actions=fourcc2xvid
+X-KDE-Priority=TopLevel
+
+[Desktop Action fourcc2xvid]
+Name=Change fourcc to xvid
+Icon=emblem-videos-symbolic
+Exec=konsole --noclose -e change-fourcc %F

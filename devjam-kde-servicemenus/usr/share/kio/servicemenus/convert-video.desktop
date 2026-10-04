@@ -1,0 +1,27 @@
+[Desktop Entry]
+Type=Service
+Icon=emblem-videos-symbolic
+MimeType=video/*;
+Actions=ConvertToMP4;ConvertToMKV;ConvertToMP4Lossy;ConvertToAVILossy
+X-KDE-Submenu=Convert Video
+X-KDE-Priority=TopLevel
+
+[Desktop Action ConvertToMP4]
+Name=Convert video to MP4 Lossless
+Icon=emblem-videos-symbolic
+Exec=konsole --noclose -e vid-convert-container --mp4 %F
+
+[Desktop Action ConvertToMKV]
+Name=Convert video to MKV Lossless
+Icon=emblem-videos-symbolic
+Exec=konsole --noclose -e vid-convert-container --mkv %F
+
+[Desktop Action ConvertToMP4Lossy]
+Name=Recompress video to MP4 Lossy
+Icon=emblem-videos-symbolic
+Exec=konsole --noclose -e vid-convert-codec --mp4 %F
+
+[Desktop Action ConvertToAVILossy]
+Name=Recompress video to AVI Lossy
+Icon=emblem-videos-symbolic
+Exec=konsole --noclose -e vid-convert-codec --avi %F

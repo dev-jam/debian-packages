@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=PsychoPy Studio
+GenericName=PsychoPy Experiment Builder
+Exec=/opt/psychopy/PsychoPy-studio/start_psychopy
+Icon=/usr/share/icons/psychopy_studio.png
+Terminal=false
+Categories=Education;Science;Development;
+MimeType=application/x-psyexp;
+Keywords=psychopy;experiment;builder;psyexp;design;
+TryExec=/opt/psychopy/PsychoPy-studio/start_psychopy
+StartupNotify=true
+StartupWMClass=psychopy

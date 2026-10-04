@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Interactive SMART menu for SATA (via SAT passthrough) and NVMe disks.
+set -euo pipefail
+
+command -v lsblk >/dev/null || { echo "Error: lsblk not installed" >&2; exit 1; }
+# smartctl lives in /usr/sbin, which Debian/Ubuntu only puts in root's PATH by
+# default (see /etc/login.defs: ENV_SUPATH vs ENV_PATH) - a normal user's PATH
+# usually excludes it, even though the actual call below works fine via sudo's
+# own secure_path. Extend PATH just for this check so it isn't a false negative.
+PATH="$PATH:/usr/sbin:/sbin" command -v smartctl >/dev/null || { echo "Error: smartctl not installed. Install it via: apt install smartmontools" >&2; exit 1; }
+
+# This is an interactive menu with no non-interactive mode - without a
+# terminal, the "Select a disk"/"Select an option" prompts below read empty
+# input on every iteration, which the menu treats as an invalid choice and
+# retries forever (a 100%-CPU busy loop), rather than failing once, clearly.
+if [ ! -t 0 ] || [ ! -t 1 ]; then
+    echo "Error: This is an interactive menu and requires a terminal (stdin/stdout)." >&2
+    exit 1
+fi
+
+# Use sudo only if we are not already root.
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
+# Populate parallel arrays in one lsblk call: name, size, model, transport.
+select_device() {
+    local names=() sizes=() models=() trans=()
+
+    while read -r line; do
+        eval "$line"
+        [ "$TYPE" = "disk" ] || continue
+        names+=("$NAME")
+        sizes+=("$SIZE")
+        models+=("$MODEL")
+        trans+=("$TRAN")
+    done < <(lsblk -dP -o NAME,TYPE,SIZE,MODEL,TRAN)
+
+    if [ ${#names[@]} -eq 0 ]; then
+        echo "No block devices found."
+        exit 1
+    fi
+
+    echo "Available disks:"
+    for i in "${!names[@]}"; do
+        printf "  %d) /dev/%-10s %-8s %-6s %s\n" "$((i + 1))" "${names[$i]}" "${sizes[$i]}" "${trans[$i]}" "${models[$i]}"
+    done
+    echo "  q) Quit"
+
+    echo
+    read -rp "Select a disk (number or 'q' to quit): " disk_choice
+
+    if [[ "$disk_choice" == "q" || "$disk_choice" == "Q" ]]; then
+        exit 0
+    fi
+
+    if ! [[ "$disk_choice" =~ ^[0-9]+$ ]] || [ "$disk_choice" -lt 1 ] || [ "$disk_choice" -gt "${#names[@]}" ]; then
+        echo "Invalid choice."
+        return 1
+    fi
+
+    local idx=$((disk_choice - 1))
+    device="/dev/${names[$idx]}"
+    selected_size="${sizes[$idx]}"
+    selected_model="${models[$idx]}"
+    selected_trans="${trans[$idx]}"
+
+    # Pick the smartctl -d type based on name and transport.
+    if [[ "${names[$idx]}" == nvme* ]]; then
+        smart_type="nvme"
+    elif [ "${trans[$idx]}" = "usb" ]; then
+        smart_type="sat"
+    else
+        # Directly attached SATA/SAS: let smartctl auto-detect, forcing
+        # -d sat here can misbehave on some HBA/SAS controllers.
+        smart_type="auto"
+    fi
+
+    return 0
+}
+
+action_menu() {
+    while true; do
+        echo
+        printf "Selected: %-12s %-8s %-6s %-30s (using -d %s)\n" \
+            "$device" "$selected_size" "$selected_trans" "$selected_model" "$smart_type"
+        echo "1) Show SMART attributes"
+        echo "2) Start short test"
+        echo "3) Start conveyance test"
+        echo "4) Start long test"
+        echo "5) Show self test log"
+        echo "b) Back to device selection"
+        echo "q) Quit"
+        read -rp "Select an option: " action_choice
+
+        # smartctl's exit code is a bitmask where almost any historical
+        # SMART condition (not just a live failure) yields non-zero, so
+        # "|| true" prevents `set -e` from killing the whole menu loop
+        # on an otherwise successful, informative command.
+        case "$action_choice" in
+            1) $SUDO smartctl -d "$smart_type" -a "$device" || true ;;
+            2)
+                $SUDO smartctl -d "$smart_type" -t short "$device" || true
+                echo "Test started, use option 5 later to check progress/result."
+                ;;
+            3)
+                if [ "$smart_type" = "nvme" ]; then
+                    echo "Conveyance test does not apply to NVMe devices."
+                else
+                    $SUDO smartctl -d "$smart_type" -t conveyance "$device" || true
+                    echo "Test started (not every disk supports conveyance)."
+                fi
+                ;;
+            4)
+                $SUDO smartctl -d "$smart_type" -t long "$device" || true
+                echo "Test started, this can take a while; check later with option 5."
+                ;;
+            5) $SUDO smartctl -d "$smart_type" -l selftest "$device" || true ;;
+            b|B) return 0 ;;
+            q|Q) exit 0 ;;
+            *) echo "Invalid choice." ;;
+        esac
+    done
+}
+
+while true; do
+    if select_device; then
+        action_menu
+    fi
+done

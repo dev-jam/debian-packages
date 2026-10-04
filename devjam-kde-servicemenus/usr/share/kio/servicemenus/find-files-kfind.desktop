@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=34
+Icon=kfind
+MimeType=inode/directory;
+Actions=FindFilesKFind
+X-KDE-Priority=TopLevel
+
+[Desktop Action FindFilesKFind]
+Name=Find Files/Folders with KFind
+Icon=kfind
+Exec=kfind %u

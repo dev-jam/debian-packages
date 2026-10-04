@@ -1,0 +1,13 @@
+#!/bin/sh
+
+## add extpack
+version="$(vboxmanage -v)"
+echo "${version}"
+var1=$(echo "${version}" | cut -d 'r' -f 1)
+file_extpack="Oracle_VM_VirtualBox_Extension_Pack-${var1}.vbox-extpack"
+echo "${file_extpack}"
+url="https://download.virtualbox.org/virtualbox"
+wget "${url}"/"${var1}"/"${file_extpack}" -O /tmp/"${file_extpack}"
+
+echo "y" | VBoxManage extpack install /tmp/"${file_extpack}" --replace
+VBoxManage extpack cleanup

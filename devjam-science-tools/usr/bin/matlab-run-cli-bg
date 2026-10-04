@@ -1,0 +1,22 @@
+#!/bin/sh
+# Run Matlab without GUI for a given .m file
+# Usage: matlab-run-cli-bg <file.m>
+
+file="$1"
+
+if [ -z "$file" ]; then
+    echo "Usage: $0 <file.m>"
+    exit 1
+fi
+
+echo "Running Matlab (nogui, nodesktop) on: $file"
+echo
+
+# Run Matlab interactively; Ctrl+C is handled by Matlab itself
+matlab -nodisplay -nosplash -nodesktop -r "run('${file}')"
+
+# After Matlab exits, show message (no pause needed)
+echo
+echo "Matlab has exited."
+exit 0
+

@@ -1,0 +1,260 @@
+#!/bin/bash
+# /etc/grub.d/11_experiment_mode_generator
+#
+# Generates /etc/grub.d/11_experiment_mode which provides:
+#   - A top-level "Experiment Mode" entry using the latest kernel
+#   - An "Advanced options" submenu with CPU presets (0,2,4,6),
+#     then kernel choices inside each preset.
+#
+# Configuration:
+#   ENABLE_EXPERIMENT_MODE controls if the GRUB entries should be generated (true/false)
+#   DEFAULT_NR_ISO_CPU controls isolated CPUs (0, 2, 4, or 6)
+#   GRUB_EXPERIMENT_MODE_DEFAULT adds extra kernel parameters for experiment mode
+#
+# Example /etc/default/grub.d/experiment_mode_defaults.cfg:
+#     ENABLE_EXPERIMENT_MODE="true"
+#     DEFAULT_NR_ISO_CPU=6
+#     GRUB_EXPERIMENT_MODE_DEFAULT="intel_pstate=disable"
+
+set -euo pipefail
+
+# ----------------------------
+# Function: check if in chroot
+# ----------------------------
+in_chroot() {
+    [ -f /.chroot ] && return 0
+    if [ -d /proc/1/root ]; then
+        [ "$(readlink /proc/1/root)" != "/" ] && return 0
+    fi
+    return 1
+}
+
+if in_chroot; then
+    echo "Skipping GRUB custom update: detected chroot/bootstrap environment"
+    exit 0
+fi
+
+# ----------------------------
+# Predefine GRUB variables
+# ----------------------------
+GRUB_CMDLINE_LINUX_DEFAULT=""
+GRUB_EXPERIMENT_MODE_DEFAULT=""
+ENABLE_EXPERIMENT_MODE="true"
+
+# Source main GRUB config
+[[ -f /etc/default/grub ]] && . /etc/default/grub
+
+# Source drop-in configs safely
+for f in /etc/default/grub.d/*.cfg; do
+    [[ -f "$f" ]] || continue
+    . "$f"
+done
+
+# ----------------------------
+# Custom GRUB file target
+# ----------------------------
+CUSTOM_FILE="/etc/grub.d/11_experiment_mode"
+
+# ----------------------------
+# Check if Experiment Mode is enabled
+# ----------------------------
+ENABLE_EXPERIMENT_MODE="${ENABLE_EXPERIMENT_MODE:-true}"
+
+if [[ "$ENABLE_EXPERIMENT_MODE" != "true" ]]; then
+    echo "Experiment mode is disabled (ENABLE_EXPERIMENT_MODE=$ENABLE_EXPERIMENT_MODE)"
+    if [[ -f "$CUSTOM_FILE" ]]; then
+        rm -f "$CUSTOM_FILE"
+        echo "Removed existing $CUSTOM_FILE"
+    fi
+    exit 0
+fi
+
+# ----------------------------
+# Normalize kernel parameters
+# ----------------------------
+KERNEL_PARAMETERS="$(echo "$GRUB_CMDLINE_LINUX_DEFAULT" | tr -s '[:space:]' ' ')"
+EXPERIMENT_EXTRA_PARAMETERS="$(echo "${GRUB_EXPERIMENT_MODE_DEFAULT:-}" | tr -s '[:space:]' ' ')"
+
+# Combine for experiment mode
+if [[ -n "$EXPERIMENT_EXTRA_PARAMETERS" ]]; then
+    EXPERIMENT_KERNEL_PARAMETERS="$KERNEL_PARAMETERS $EXPERIMENT_EXTRA_PARAMETERS"
+else
+    EXPERIMENT_KERNEL_PARAMETERS="$KERNEL_PARAMETERS"
+fi
+
+# ----------------------------
+# CPU presets
+# ----------------------------
+declare -A CPU_PRESETS
+CPU_PRESETS[0]="experiment_mode=1"
+CPU_PRESETS[2]="isolcpus=2,3 nohz_full=2,3 rcu_nocbs=2,3 experiment_mode=1"
+CPU_PRESETS[4]="isolcpus=2-5 nohz_full=2-5 rcu_nocbs=2-5 experiment_mode=1"
+CPU_PRESETS[6]="isolcpus=2-7 nohz_full=2-7 rcu_nocbs=2-7 experiment_mode=1"
+
+# Validate DEFAULT_NR_ISO_CPU
+if [[ -z "${DEFAULT_NR_ISO_CPU:-}" ]]; then
+    DEFAULT_NR_ISO_CPU=6
+fi
+if [[ "$DEFAULT_NR_ISO_CPU" != "0" && "$DEFAULT_NR_ISO_CPU" != "2" && "$DEFAULT_NR_ISO_CPU" != "4" && "$DEFAULT_NR_ISO_CPU" != "6" ]]; then
+    echo "Warning: Invalid DEFAULT_NR_ISO_CPU='$DEFAULT_NR_ISO_CPU'. Valid values are 0, 2, 4, or 6. Using default 6 CPUs."
+    DEFAULT_NR_ISO_CPU=6
+fi
+DEFAULT_CPU_PRESET="${CPU_PRESETS[$DEFAULT_NR_ISO_CPU]}"
+
+# ----------------------------
+# Detect ROOT_UUID safely
+# ----------------------------
+ROOT_DEV=$(findmnt -n -o SOURCE / || true)
+ROOT_UUID=""
+if [ -n "$ROOT_DEV" ]; then
+    ROOT_UUID=$(blkid -s UUID -o value "$ROOT_DEV" || true)
+fi
+if [ -z "$ROOT_UUID" ]; then
+    echo "Skipping GRUB custom update: could not detect root UUID"
+    exit 0
+fi
+
+# ----------------------------
+# Find all kernels in /boot (generic + Liquorix)
+# ----------------------------
+mapfile -t ALL_KERNELS < <(printf "%s\n" /boot/vmlinuz-* 2>/dev/null)
+if [[ ${#ALL_KERNELS[@]} -eq 0 ]]; then
+    echo "Skipping GRUB custom update: no kernels found in /boot"
+    exit 0
+fi
+
+# Separate Liquorix and generic kernels
+LIQUORIX_KERNELS=()
+GENERIC_KERNELS=()
+for KERNEL in "${ALL_KERNELS[@]}"; do
+    FILE=$(basename "$KERNEL")
+    if [[ "$FILE" == *-liquorix* ]]; then
+        LIQUORIX_KERNELS+=("$KERNEL")
+    else
+        GENERIC_KERNELS+=("$KERNEL")
+    fi
+done
+
+# Sort newest to oldest
+mapfile -t LIQUORIX_KERNELS < <(printf "%s\n" "${LIQUORIX_KERNELS[@]}" | sort -Vr)
+mapfile -t GENERIC_KERNELS < <(printf "%s\n" "${GENERIC_KERNELS[@]}" | sort -Vr)
+ALL_KERNELS_SORTED=("${LIQUORIX_KERNELS[@]}" "${GENERIC_KERNELS[@]}")
+
+# Latest kernel = newest Liquorix if available, else newest generic
+if [[ ${#LIQUORIX_KERNELS[@]} -gt 0 ]]; then
+    LATEST_KERNEL="${LIQUORIX_KERNELS[0]}"
+    LATEST_LABEL="Latest Liquorix"
+else
+    LATEST_KERNEL="${GENERIC_KERNELS[0]}"
+    LATEST_LABEL="Latest Generic"
+fi
+
+LATEST_KERNEL_FILE=$(basename "$LATEST_KERNEL")
+LATEST_INITRD_FILE="initrd.img-${LATEST_KERNEL_FILE#vmlinuz-}"
+
+# ----------------------------
+# Generate custom GRUB entry
+# ----------------------------
+cat > "$CUSTOM_FILE" <<'EOF'
+#!/bin/sh
+echo 1>&2 "Adding Experiment Mode GRUB entries"
+exec tail -n +4 $0
+EOF
+
+# Top-level entry with default preset marker
+cat >> "$CUSTOM_FILE" <<EOF
+menuentry "Debian GNU/Linux - Experiment Mode ($LATEST_LABEL, $DEFAULT_NR_ISO_CPU CPUs, default preset)" {
+	savedefault
+	load_video
+	gfxmode \$linux_gfx_mode
+	insmod gzio
+	if [ x\$grub_platform = xxen ]; then insmod xzio; insmod lzopio; fi
+	insmod part_gpt
+	insmod ext2
+	search --no-floppy --fs-uuid --set=root $ROOT_UUID
+	echo	'Loading Linux ${LATEST_KERNEL_FILE#vmlinuz-} ...'
+	linux	/boot/$LATEST_KERNEL_FILE root=UUID=$ROOT_UUID ro $EXPERIMENT_KERNEL_PARAMETERS $DEFAULT_CPU_PRESET
+	echo	'Loading initial ramdisk ...'
+	initrd	/boot/$LATEST_INITRD_FILE
+}
+EOF
+
+# ----------------------------
+# Submenu: CPU presets (0,2,4,6)
+# ----------------------------
+cat >> "$CUSTOM_FILE" <<'EOF'
+submenu "Advanced options for Debian GNU/Linux - Experiment Mode" {
+EOF
+
+for CORES in 0 2 4 6; do
+    PRESET="${CPU_PRESETS[$CORES]}"
+
+    # Label for submenu
+    if [[ "$CORES" -eq 0 ]]; then
+        TITLE="No isolated CPUs"
+    else
+        TITLE="$CORES isolated CPUs"
+    fi
+    [[ "$CORES" == "$DEFAULT_NR_ISO_CPU" ]] && TITLE="$TITLE, default"
+
+    cat >> "$CUSTOM_FILE" <<EOF
+	submenu "$TITLE" {
+		# --- Kernel choices ---
+EOF
+
+    for KERNEL in "${ALL_KERNELS_SORTED[@]}"; do
+        KERNEL_FILE=$(basename "$KERNEL")
+        INITRD_FILE="initrd.img-${KERNEL_FILE#vmlinuz-}"
+        KERNEL_VERSION="${KERNEL_FILE#vmlinuz-}"
+        MARK=""
+        [[ "$KERNEL_VERSION" == *-liquorix* ]] && MARK=" (Liquorix)"
+
+        cat >> "$CUSTOM_FILE" <<EOF
+		menuentry "Debian GNU/Linux, with Linux $KERNEL_VERSION$MARK" {
+			savedefault
+			load_video
+			gfxmode \$linux_gfx_mode
+			insmod gzio
+			if [ x\$grub_platform = xxen ]; then insmod xzio; insmod lzopio; fi
+			insmod part_gpt
+			insmod ext2
+			search --no-floppy --fs-uuid --set=root $ROOT_UUID
+			echo	'Loading Linux $KERNEL_VERSION ...'
+			linux	/boot/$KERNEL_FILE root=UUID=$ROOT_UUID ro $EXPERIMENT_KERNEL_PARAMETERS $PRESET
+			echo	'Loading initial ramdisk ...'
+			initrd	/boot/$INITRD_FILE
+		}
+EOF
+    done
+
+    echo "	}" >> "$CUSTOM_FILE"
+done
+
+echo "}" >> "$CUSTOM_FILE"
+
+chmod +x "$CUSTOM_FILE"
+
+# ----------------------------
+# Summary
+# ----------------------------
+echo
+echo "Experiment Mode GRUB entries updated."
+echo
+echo "Default preset for top-level entry: $DEFAULT_NR_ISO_CPU CPUs ($DEFAULT_CPU_PRESET)"
+echo
+echo "Latest kernel: ${LATEST_KERNEL_FILE}"
+echo
+echo "Default parameters from GRUB_CMDLINE_LINUX_DEFAULT: $KERNEL_PARAMETERS"
+echo
+if [[ -n "$EXPERIMENT_EXTRA_PARAMETERS" ]]; then
+    echo "Extra experiment-mode parameters: $EXPERIMENT_EXTRA_PARAMETERS"
+else
+    echo "No extra experiment-mode parameters defined."
+fi
+echo
+echo "Available CPU presets (submenu):"
+for CORES in 0 2 4 6; do
+    echo "  - $CORES CPUs: ${CPU_PRESETS[$CORES]}"
+done
+echo
+echo "Please run update-grub"

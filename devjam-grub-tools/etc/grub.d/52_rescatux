@@ -1,0 +1,28 @@
+#!/bin/sh
+echo 1>&2 "Adding boot menu entry for Rescatux"
+exec tail -n +4 $0
+
+submenu "Rescatux" {
+
+	insmod regexp
+	insmod loopback
+
+	for iso in /boot/iso/rescatux-*.iso; do
+
+		# Prevent message when directory is empty
+		if [ "${iso}" != "/boot/iso/rescatux-*.iso" ]; then
+
+			regexp --set=iso_file '^/boot/iso/(.*$)' "$iso"
+			menuentry "Boot: $iso_file" $iso{
+				iso_path=$2
+				export iso_path
+				search --set=root --file $iso_path
+				loopback loop $iso_path
+				root=(loop)
+				configfile /boot/grub/loopback.cfg
+				loopback --delete loop
+			}
+		fi
+	done
+}
+

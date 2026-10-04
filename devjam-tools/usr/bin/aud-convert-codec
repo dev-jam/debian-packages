@@ -1,0 +1,180 @@
+#!/bin/bash
+# Converts selected audio files to FLAC, 320 kbps MP3, or WAV using flags.
+# Usage: audio-convert [--flac|--mp3|--wav] <file1> [<file2> ...]
+# Default mode is --flac if no flag is specified.
+set -euo pipefail
+
+# Check if required tools are installed
+command -v ffmpeg >/dev/null || { echo "Error: ffmpeg not installed" >&2; exit 1; }
+command -v ffprobe >/dev/null || { echo "Error: ffprobe not installed" >&2; exit 1; }
+
+# Detect once whether a terminal is available for the overwrite prompt below.
+# A bare `read` under `set -e` aborts the whole batch on EOF (e.g. run from
+# cron or with stdin redirected) instead of just skipping the one conflict -
+# so without a terminal, fall back to always skipping conflicting files.
+interactive=1
+{ [ -t 0 ] && [ -t 1 ]; } || interactive=0
+
+# Check for arguments
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 [--flac|--mp3|--wav] <file1> [<file2> ...]" >&2
+    exit 1
+fi
+
+mode="flac"
+
+# Parse optional flag
+case "$1" in
+    --flac)
+        mode="flac"
+        shift
+        ;;
+    --mp3)
+        mode="mp3"
+        shift
+        ;;
+    --wav)
+        mode="wav"
+        shift
+        ;;
+    --*)
+        echo "Error: Unknown option '$1'. Use --flac, --mp3, or --wav." >&2
+        exit 1
+        ;;
+esac
+
+# Ensure at least one input file remains
+if [ $# -eq 0 ]; then
+    echo "Error: No input files specified." >&2
+    exit 1
+fi
+
+case "$mode" in
+    flac)
+        ext="flac"
+        label="FLAC"
+        ;;
+    mp3)
+        ext="mp3"
+        label="MP3 320 kbps"
+        ;;
+    wav)
+        ext="wav"
+        label="WAV"
+        ;;
+esac
+
+success_count=0
+error_count=0
+
+for src in "$@"; do
+    if [ ! -r "$src" ]; then
+        echo "Error: '$src' does not exist or is not readable" >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    dir=$(dirname "$src")
+    base=$(basename "$src")
+    name="${base%.*}"
+    out="$dir/$name.$ext"
+
+    # Skip if source and target would be the exact same file
+    if [ "$(readlink -f "$src")" = "$(readlink -f "$out")" ]; then
+        echo "Skipping '$base': already in $label format, would overwrite the source." >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    # Interactive overwrite prompt
+    if [ -e "$out" ]; then
+        if [ "$interactive" -eq 1 ]; then
+            echo ""
+            echo "'$out' already exists."
+            read -r -p "Overwrite (o) / Skip (s) / Cancel entire batch (c)? " answer
+            case "$answer" in
+                o|O) : ;;
+                s|S) continue ;;
+                c|C) echo "Conversion cancelled."; exit 1 ;;
+                *) echo "Unrecognised answer, skipping '$base'." >&2; continue ;;
+            esac
+        else
+            echo "Skipping '$base': '$out' already exists (no terminal available to confirm)." >&2
+            error_count=$((error_count + 1))
+            continue
+        fi
+    fi
+
+    # Check write permission for output directory
+    if [ ! -w "$dir" ]; then
+        echo "Error: No write permission in '$dir'" >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    # Write to a temp file first and rename into place, so a failed/interrupted
+    # conversion never leaves a partial file at the final path. Keep the real
+    # extension on the temp file so ffmpeg still infers the right output format.
+    tmp_file=$(mktemp --suffix=".${ext}" "${dir}/.tmp.XXXXXX") || {
+        echo "Error: Failed to create temp file in '$dir'" >&2
+        error_count=$((error_count + 1))
+        continue
+    }
+    # mktemp creates files at mode 0600; restore the usual umask-based permissions
+    chmod "$(printf '%o' $((0666 & ~$(umask))))" "$tmp_file"
+
+    echo "Converting '$base' to $label..."
+    ok=1
+
+    case "$mode" in
+        flac)
+            codec_name=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$src" || echo "")
+            bit_depth=$(ffprobe -v error -select_streams a:0 -show_entries stream=bits_per_raw_sample -of default=noprint_wrappers=1:nokey=1 "$src" || echo "0")
+
+            bit_depth=${bit_depth:-0}
+            sample_fmt=(-sample_fmt s16)
+
+            if [[ "$codec_name" =~ ^(alac|flac|pcm_.*|ape|wavpack|tta|wmalossless)$ ]] && [ "$bit_depth" -gt 16 ]; then
+                sample_fmt=(-sample_fmt s32)
+                echo "ℹ️ Hi-Res lossless detected ($codec_name, $bit_depth-bit). Target: 24-bit FLAC."
+            else
+                echo "ℹ️ Standard/8-bit depth or lossy codec detected ($codec_name, $bit_depth-bit). Target: 16-bit FLAC."
+            fi
+
+            ffmpeg -y -i "$src" -map 0:a -c:a flac "${sample_fmt[@]}" "$tmp_file" -loglevel error </dev/null || ok=0
+            ;;
+        mp3)
+            ffmpeg -y -i "$src" -map 0:a -c:a libmp3lame -b:a 320k -joint_stereo 0 "$tmp_file" -loglevel error </dev/null || ok=0
+            ;;
+        wav)
+            codec_name=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$src" || echo "")
+            bit_depth=$(ffprobe -v error -select_streams a:0 -show_entries stream=bits_per_raw_sample -of default=noprint_wrappers=1:nokey=1 "$src" || echo "0")
+
+            bit_depth=${bit_depth:-0}
+            pcm_codec=(-c:a pcm_s16le)
+
+            if [[ "$codec_name" =~ ^(alac|flac|pcm_.*|ape|wavpack|tta|wmalossless)$ ]] && [ "$bit_depth" -gt 16 ]; then
+                pcm_codec=(-c:a pcm_s24le)
+                echo "ℹ️ Hi-Res lossless detected ($codec_name, $bit_depth-bit). Target: 24-bit WAV."
+            else
+                echo "ℹ️ Standard/8-bit depth or lossy codec detected ($codec_name, $bit_depth-bit). Target: 16-bit WAV."
+            fi
+
+            ffmpeg -y -i "$src" -map 0:a "${pcm_codec[@]}" "$tmp_file" -loglevel error </dev/null || ok=0
+            ;;
+    esac
+
+    if [ "$ok" -eq 1 ] && mv -n "$tmp_file" "$out"; then
+        echo "✅ Success: Converted '$base'"
+        echo ""
+        success_count=$((success_count + 1))
+    else
+        echo "❌ Error: Conversion of '$base' failed." >&2
+        echo ""
+        rm -f "$tmp_file"
+        error_count=$((error_count + 1))
+    fi
+done
+
+echo "$label conversion finished: $success_count file(s) converted, $error_count error(s)."
+exit $(( error_count > 255 ? 255 : error_count ))

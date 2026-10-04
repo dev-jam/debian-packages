@@ -1,0 +1,9 @@
+<action>
+	<icon>eyelink</icon>
+	<name>EDF2ASC Eyelink</name>
+	<command>edf2asc %F | zenity --text-info --no-wrap --title=&quot;EDF2ASC&quot; </command>
+	<description>EDF2ASC Eyelink1</description>
+	<patterns>*.edf;*.EDF</patterns>
+	<other-files/>
+	<text-files/>
+</action>

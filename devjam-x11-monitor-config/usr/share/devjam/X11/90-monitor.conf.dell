@@ -1,0 +1,6 @@
+# profile-name: Dell U2723QE
+
+Section "Monitor"
+	Identifier		"DP-1"
+	DisplaySize		595 330    # In millimeters
+EndSection

@@ -1,0 +1,85 @@
+#!/bin/bash
+# Auto-pin audio IRQs (internal + USB) to isolated cores (round-robin)
+# Uses kernel parameter isolcpus for target CPUs
+# Works for Intel, AMD, USB, and any audio IRQs
+# Logs output to /var/log/auto-pin-audio.log and rotates logs
+
+set -e
+
+LOG_DIR="/var/log"
+LOG_FILE="$LOG_DIR/auto-pin-audio_$(date '+%Y-%m-%d_%H-%M-%S').log"
+
+# --- Get isolated CPUs from kernel parameter ---
+ISOL_CPUS=$(grep -oP 'isolcpus=\K[0-9,-]+' /proc/cmdline || true)
+if [ -z "$ISOL_CPUS" ]; then
+    echo "No isolcpus kernel parameter found. Skipping auto-pinning." | tee -a "$LOG_FILE"
+    exit 0
+fi
+
+# --- Convert CPU list to array ---
+CPU_LIST=()
+IFS=',' read -ra PARTS <<< "$ISOL_CPUS"
+for p in "${PARTS[@]}"; do
+    if [[ $p == *-* ]]; then
+        IFS='-' read -r start end <<< "$p"
+        for ((i=start; i<=end; i++)); do
+            CPU_LIST+=($i)
+        done
+    else
+        CPU_LIST+=($p)
+    fi
+done
+
+NUM_CPUS=${#CPU_LIST[@]}
+if [ $NUM_CPUS -eq 0 ]; then
+    echo "No valid isolated CPUs found. Skipping auto-pinning." | tee -a "$LOG_FILE"
+    exit 0
+fi
+
+echo "Isolated CPUs for audio IRQs: ${CPU_LIST[*]}" | tee -a "$LOG_FILE"
+
+# --- Find all audio IRQs ---
+declare -A AUDIO_IRQ_MAP
+while IFS= read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*([0-9]+):.*(snd|snd_usb).* ]]; then
+        irq="${BASH_REMATCH[1]}"
+        name="${BASH_REMATCH[2]}"
+        AUDIO_IRQ_MAP[$irq]=$name
+    fi
+done < /proc/interrupts
+
+if [ ${#AUDIO_IRQ_MAP[@]} -eq 0 ]; then
+    echo "No audio IRQs found. Exiting." | tee -a "$LOG_FILE"
+    exit 0
+fi
+
+# --- Round-robin pinning ---
+idx=0
+for irq in $(echo "${!AUDIO_IRQ_MAP[@]}" | tr ' ' '\n' | sort -n); do
+    target_cpu=${CPU_LIST[$((idx % NUM_CPUS))]}
+    if ! echo "$target_cpu" > /proc/irq/$irq/smp_affinity_list 2>/dev/null; then
+        echo "Failed to set affinity for IRQ $irq to CPU $target_cpu" | tee -a "$LOG_FILE"
+        continue
+    fi
+    AUDIO_IRQ_NAME[$irq]="$name"
+    AUDIO_IRQ_CPU[$irq]="$target_cpu"
+    idx=$((idx + 1))
+done
+
+# --- Print summary table ---
+{
+echo
+echo "=== Audio IRQ Pinning Summary ==="
+echo "Date: $(date)"
+printf "%-6s %-25s %-10s\n" "IRQ" "Name" "Pinned CPU"
+printf "%-6s %-25s %-10s\n" "----" "------------------------" "----------"
+for irq in $(printf "%s\n" "${!AUDIO_IRQ_NAME[@]}" | sort -n); do
+    name=${AUDIO_IRQ_NAME[$irq]}
+    cpu=${AUDIO_IRQ_CPU[$irq]}
+    printf "%-6s %-25s %-10s\n" "$irq" "$name" "$cpu"
+done
+echo "Auto-pinning of internal and USB audio IRQs complete."
+} | tee -a "$LOG_FILE"
+
+# --- Rotate logs: keep last 50 ---
+ls -1t "$LOG_DIR"/auto-pin-audio_*.log 2>/dev/null | tail -n +51 | xargs -r rm --

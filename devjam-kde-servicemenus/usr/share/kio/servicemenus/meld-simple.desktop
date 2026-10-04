@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=2
+Icon=org.gnome.Meld
+MimeType=all/all;
+X-KDE-RequiredNumberOfUrls=2,3
+Actions=meldFiles;
+X-KDE-Priority=TopLevel
+X-KDE-StartupNotify=false
+
+[Desktop Action meldFiles]
+Icon=org.gnome.Meld
+Exec=meld %U
+Name=Compare selected files/folder in Meld
+

@@ -1,0 +1,8 @@
+<action>
+	<icon>audio-speakers</icon>
+	<name>To FLAC</name>
+	<command>pacpl --to FLAC --gui %F</command>
+	<description>To FLAC</description>
+	<patterns>*</patterns>
+	<audio-files/>
+</action>

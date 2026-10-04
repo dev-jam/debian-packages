@@ -1,0 +1,6 @@
+#!/bin/sh
+
+alsa-only-start
+
+pulse-disable
+pipewire-disable

@@ -1,0 +1,58 @@
+#!/bin/sh
+
+set -e
+
+CONF_FILE="/etc/udev/rules.d/60-ioschedulers.rules"
+PRESET_DIR="/usr/share/devjam/udev/rules.d"
+
+# 1. Check for root privileges
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Error: This script must be run as root (or via sudo)." >&2
+    exit 1
+fi
+
+# 2. Validate input argument
+case "$1" in
+    reset|kyber|none)
+        ;;
+    *)
+        echo "Error: Invalid argument '$1'." >&2
+        echo "Allowed arguments are: reset, kyber, none" >&2
+        exit 1
+        ;;
+esac
+
+echo "Current I/O schedulers:"
+echo
+check-io-schedulers
+echo
+echo "Switching to '$1' profile..."
+echo
+
+# 3. Apply profile configuration
+if [ "$1" = "reset" ]; then
+    if [ -f "$CONF_FILE" ]; then
+        rm -f "$CONF_FILE"
+        udevadm control --reload-rules && udevadm trigger
+        echo "Custom rules removed. System default profile restored."
+        echo "Note: Fully reverting to initial kernel defaults may require a reboot."
+    else
+        echo "Already using the system default profile."
+    fi
+else
+    PRESET_FILE="${PRESET_DIR}/60-ioschedulers.rules.$1"
+    
+    if [ ! -f "$PRESET_FILE" ]; then
+        echo "Error: Preset file '$PRESET_FILE' not found." >&2
+        exit 1
+    fi
+
+    cp -f "$PRESET_FILE" "$CONF_FILE"
+    udevadm control --reload-rules && udevadm trigger
+    
+    sleep 2
+    echo
+    echo "New I/O schedulers:"
+    echo
+    check-io-schedulers
+fi

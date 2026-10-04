@@ -1,0 +1,8 @@
+<action>
+	<icon>meld</icon>
+	<name>Concatenate text files</name>
+	<command>cat %F &gt; &apos;uca.xml.new&apos;</command>
+	<description>Concatenate text files</description>
+	<patterns>*</patterns>
+	<text-files/>
+</action>

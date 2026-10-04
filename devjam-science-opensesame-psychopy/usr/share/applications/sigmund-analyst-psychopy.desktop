@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Sigmund Analyst with PsychoPy
+GenericName=AI-enhanced code editor for data analysis
+Comment=AI-enhanced code editor for data analysis
+Exec=sigmund-analyst-psychopy-launch
+Icon=/usr/share/icons/sigmund-analyst.png
+Terminal=false
+Categories=Development;IDE;
+StartupNotify=true

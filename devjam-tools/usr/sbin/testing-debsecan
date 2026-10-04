@@ -1,0 +1,3 @@
+#!/bin/sh
+
+apt-get update && apt-get install -t sid $(debsecan --suite sid --format packages --only-fixed)

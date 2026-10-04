@@ -1,0 +1,90 @@
+#!/bin/bash
+# Installed by brave-flags-wrapper. Wraps the original launcher, which
+# dpkg-divert has moved to "<this file>.original". Used for both Brave and
+# Brave Origin.
+#
+# Flag file (one is used, never both):
+#   ${XDG_CONFIG_HOME:-~/.config}/brave-flags.conf   if it exists (may be empty)
+#   /etc/brave/brave-flags.conf                      otherwise (system default)
+# To customise: copy the /etc file to your home directory and edit it.
+# An empty home file means "no default flags".
+# Command line arguments always come after the flags from the file.
+#
+# Format: flags separated by newlines and/or whitespace, each starting with
+# '-'. Text after '#' is a comment. Flag values cannot contain spaces.
+# Lines that do not start with '-', end in a backslash, or contain '"' or '$'
+# (shell syntax such as 'export BRAVE_FLAGS=...') are ignored with a warning
+# on stderr.
+#
+# --enable-features= and --disable-features= lines are merged into one switch
+# each (comma-joined, duplicates removed), because Chromium only honours one
+# occurrence of a switch. Features given on the command line are NOT merged
+# into these.
+
+self="$(readlink -f "$0")"
+original="${self}.original"
+
+if [ ! -x "$original" ]; then
+    echo "$(basename "$self"): original launcher $original not found" >&2
+    exit 127
+fi
+
+user_file="${XDG_CONFIG_HOME:-$HOME/.config}/brave-flags.conf"
+if [ -f "$user_file" ] && [ -r "$user_file" ]; then
+    file="$user_file"
+else
+    file="/etc/brave/brave-flags.conf"
+fi
+
+flags=()
+enable_features=""
+disable_features=""
+
+# merge_features <current-list> <new-comma-list>  -> prints merged list
+merge_features() {
+    local list="$1" item
+    local IFS=','
+    for item in $2; do
+        [ -n "$item" ] || continue
+        case ",$list," in
+            *",$item,"*) ;;
+            *) list="${list:+$list,}$item" ;;
+        esac
+    done
+    printf '%s' "$list"
+}
+
+add_flag() {
+    case "$1" in
+        --enable-features=*)  enable_features="$(merge_features "$enable_features" "${1#--enable-features=}")" ;;
+        --disable-features=*) disable_features="$(merge_features "$disable_features" "${1#--disable-features=}")" ;;
+        *) flags+=("$1") ;;
+    esac
+}
+
+if [ -f "$file" ] && [ -r "$file" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%%#*}"
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [ -n "$line" ] || continue
+        case "$line" in
+            *\\|[!-]*|*'"'*|*'$'*)
+                echo "$(basename "$self"): ignoring line in $file (flags must start with '-'; no shell syntax): $line" >&2
+                ;;
+            *[[:space:]]-*)
+                # several flags on one line: split on whitespace
+                read -r -a tokens <<< "$line"
+                for token in "${tokens[@]}"; do add_flag "$token"; done
+                ;;
+            *)
+                add_flag "$line"
+                ;;
+        esac
+    done < "$file"
+fi
+
+[ -n "$enable_features" ] && flags+=("--enable-features=$enable_features")
+[ -n "$disable_features" ] && flags+=("--disable-features=$disable_features")
+
+exec "$original" "${flags[@]}" "$@"

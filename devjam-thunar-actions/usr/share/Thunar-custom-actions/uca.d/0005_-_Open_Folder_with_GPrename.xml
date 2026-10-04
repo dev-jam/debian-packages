@@ -1,0 +1,8 @@
+<action>
+	<icon>dialog-warning</icon>
+	<name>Open Folder with GPrename</name>
+	<command>gprename %F</command>
+	<description>Open Folder with GPrename</description>
+	<patterns>*</patterns>
+	<directories/>
+</action>

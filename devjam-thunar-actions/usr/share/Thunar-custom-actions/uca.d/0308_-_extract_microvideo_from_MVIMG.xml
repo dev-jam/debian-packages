@@ -1,0 +1,9 @@
+<action>
+	<icon>audio-speakers</icon>
+	<name>Extract microvideo from MVIMG</name>
+	<command>extract-microvideo-batch %F</command>
+	<description>Extract microvideo from MVIMG</description>
+	<range></range>
+	<patterns>*.jpg;*.JPG</patterns>
+	<image-files/>
+</action>

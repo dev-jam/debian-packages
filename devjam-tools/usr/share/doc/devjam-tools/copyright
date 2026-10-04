@@ -1,0 +1,94 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: devjam-tools
+Source: https://github.com/dev-jam/debian-sources/tree/main/devjam-tools
+
+Files: *
+Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>
+License: GPL-3.0-or-later
+
+Files: usr/bin/mkvdts2ac3
+Copyright: 2011 Jake Wharton <jakewharton@gmail.com>
+           2011 Chris Hoekstra <chris.hoekstra@gmail.com>
+License: Apache-2.0
+
+Files: usr/bin/alsa-capabilities
+Copyright: 2021 Ronald van Engelen <r.v.engelen+alsacapabilities@gmail.com>
+License: GPL-3.0-or-later
+
+Files: usr/bin/smt-manager
+Copyright: 2015 Steven Barrett
+License: GPL-2.0-or-later
+
+Files: usr/share/S/*
+Copyright: Paolo Valente and others
+License: GPL-2.0-only
+
+License: GPL-3.0-or-later
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 3 of the License, or
+ (at your option) any later version.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 3 can be found in "/usr/share/common-licenses/GPL-3".
+
+License: GPL-2.0-or-later
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in "/usr/share/common-licenses/GPL-2".
+
+License: GPL-2.0-only
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; version 2 of the License.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in "/usr/share/common-licenses/GPLIn het DEP-5 formaat wordt dit bestand verwerkt onder de licentieaanduiding **`GPL-2.0-only`**, omdat de auteur (Paolo Valente) expliciet vermeldt dat uitsluitend versie 2 van de GPL van toepassing is en niet latere versies.
+
+Hier is het bijgewerkte `copyright`-bestand met alle tot nu toe genoemde bestanden en licenties:
+
+```text
+Format: [https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/](https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/)
+Upstream-Name: devjam-tools
+Source: [https://github.com/dev-jam/debian-sources/tree/main/devjam-tools](https://github.com/dev-jam/debian-sources/tree/main/devjam-tools)
+
+Files: *
+Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>
+License: GPL-3.0-or-later
+
+Files: usr/bin/mkvdts2ac3.sh
+Copyright: 2011 Jake Wharton <jakewharton@gmail.com>
+           2011 Chris Hoekstra <chris.hoekstra@gmail.com>
+License: Apache-2.0
+
+Files: usr/bin/alsa-capabilities
+Copyright: 2021 Ronald van Engelen <r.v.engelen+alsacapabilities@gmail.com>
+License: GPL-3.0-or-later
+
+Files: usr/bin/smt-manager.pl
+Copyright: 2015 Steven Barrett
+License: GPL-2.0-or-later
+
+Files: usr/share/S/*
+Copyright: Paolo Valente and contributors
+License: GPL-2.0-only
+
+License: GPL-3.0-or-later
+ On Debian systems, the complete text of the GNU General Public
+ License version 3 can be found in "/usr/share/common-licenses/GPL-3".
+
+License: GPL-2.0-or-later
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in "/usr/share/common-licenses/GPL-2".
+
+License: GPL-2.0-only
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in "/usr/share/common-licenses/GPL-2".
+
+License: Apache-2.0
+ On Debian systems, the complete text of the Apache License version 2.0
+ can be found in "/usr/share/common-licenses/Apache-2.0".

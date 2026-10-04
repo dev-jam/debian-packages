@@ -1,0 +1,10 @@
+<action>
+	<icon>document-duplicate</icon>
+	<name>Check for duplicate files fclones</name>
+	<submenu></submenu>
+	<command>check-dupes-fclones %F | zenity --text-info --no-wrap --title=&quot;Check for duplicate files fclones&quot; </command>
+	<description>Check for duplicate files fclones</description>
+	<range></range>
+	<patterns>*</patterns>
+	<directories/>
+</action>

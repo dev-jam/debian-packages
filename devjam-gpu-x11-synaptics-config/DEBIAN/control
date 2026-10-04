@@ -1,0 +1,8 @@
+Package: devjam-gpu-x11-synaptics-config
+Version: 1.0-3
+Section: x11
+Priority: optional
+Architecture: all
+Recommends: xserver-xlibre-input-synaptics | xserver-xorg-input-synaptics
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Inertial scrolling (aka kinetic scrolling) for synaptics

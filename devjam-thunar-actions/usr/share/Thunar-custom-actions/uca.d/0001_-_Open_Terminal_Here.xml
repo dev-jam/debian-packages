@@ -1,0 +1,9 @@
+<action>
+	<icon>utilities-terminal</icon>
+	<name>Open Terminal Here</name>
+	<command>exo-open --working-directory %f --launch TerminalEmulator</command>
+	<description>Example for a custom action</description>
+	<patterns>*</patterns>
+	<startup-notify/>
+	<directories/>
+</action>

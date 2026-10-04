@@ -1,0 +1,10 @@
+<action>
+	<icon>document-duplicate</icon>
+	<name>Compare multiple folders for unique files (in isolation) with fclones</name>
+	<submenu></submenu>
+	<command>check-unique-isolate-fclones %F | zenity --text-info --no-wrap --title=&quot;Compare multiple folders for unique files (in isolation) with fclones&quot; </command>
+	<description>Compare multiple folders for unique files (in isolation) with fclones</description>
+	<range></range>
+	<patterns>*</patterns>
+	<directories/>
+</action>

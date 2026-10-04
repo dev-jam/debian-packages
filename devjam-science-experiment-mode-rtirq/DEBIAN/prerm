@@ -1,0 +1,28 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+	remove|purge)
+
+		# Stop auto-pin-audio service before removal
+		if command -v systemctl >/dev/null 2>&1; then
+			if [ "$1" = remove ]; then
+				systemctl disable --now auto-pin-audio.service || true
+			fi
+		fi
+
+		# Remove experiment mode from rtirq
+		conf_file="/etc/systemd/system/rtirq.service.d/experiment_mode.conf"
+		if test -f "${conf_file}"; then
+			rm -f "${conf_file}" 2>/dev/null || true
+		fi
+		conf_dir="/etc/systemd/system/rtirq.service.d"
+		if test -d "${conf_dir}"; then
+			rmdir "${conf_dir}" 2>/dev/null || true
+		fi
+		;;
+esac
+
+exit 0
+
+

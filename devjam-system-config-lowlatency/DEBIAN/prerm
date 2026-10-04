@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+	remove|purge)
+
+		if [ "$1" = remove ] && [ "${DPKG_MAINTSCRIPT_PACKAGE_REFCOUNT:-1}" = 1 ]; then
+			pam-auth-update --package --remove rt-limits
+		fi
+		;;
+esac
+
+exit 0

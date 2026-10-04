@@ -1,0 +1,27 @@
+#!/bin/sh
+echo 1>&2 "Adding boot menu entry for finding and booting ISO's (local)"
+exec tail -n +4 $0
+# searches the filesystem where grub resides for iso files in the directory "/boot-isos"
+
+submenu "Find and boot ISO's (local)" {
+
+	insmod regexp
+	insmod loopback
+
+	for iso in /boot-isos/*.iso; do
+
+		# Prevent message when directory is empty
+		if [ -f "$iso" ]; then
+			regexp --set=iso_file '^/boot-isos/(.*$)' "$iso"
+			menuentry "Boot: $iso_file" $iso{
+				iso_path=$2
+				export iso_path
+				search --set=root --file $iso_path
+				loopback loop $iso_path
+				root=(loop)
+				configfile /boot/grub/loopback.cfg
+				loopback --delete loop
+			}
+		fi
+	done
+}

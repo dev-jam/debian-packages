@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+if [ "$1" = remove ] || [ "$1" = disappear ]; then
+    for f in /usr/bin/brave-browser-stable /usr/bin/brave-origin-stable; do
+        # our own file is already gone at this point
+        dpkg-divert --package brave-flags-wrapper --remove --rename "$f"
+    done
+fi

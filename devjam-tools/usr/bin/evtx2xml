@@ -1,0 +1,57 @@
+#!/bin/bash
+# Convert EVTX files to XML format using evtxexport
+set -euo pipefail
+
+# Check if evtxexport is installed
+command -v evtxexport >/dev/null || { echo "Error: evtxexport not installed" >&2; exit 1; }
+
+# Check for arguments
+[ $# -eq 0 ] && { echo "Usage: $0 <evtx_file1> [<evtx_file2> ...]" >&2; exit 1; }
+
+success_count=0
+error_count=0
+
+# Process each input file
+for input_file in "$@"; do
+    # Check if file exists and is readable
+    [ ! -r "$input_file" ] && { echo "Error: '$input_file' not readable" >&2; error_count=$((error_count + 1)); continue; }
+
+    # Warn if file doesn't end with .evtx
+    [[ ! "$input_file" =~ \.evtx$ ]] && { echo "Warning: '$input_file' does not have .evtx extension" >&2; }
+
+    # Generate output filename
+    output_file="${input_file%.evtx}.xml"
+
+    # If output file exists, append current date and time
+    if [ -f "$output_file" ]; then
+        current_datetime=$(date +%Y%m%d_%H%M%S)
+        output_file="${input_file%.evtx}_${current_datetime}.xml"
+    fi
+
+    # Check write permission
+    output_dir=$(dirname "$output_file")
+    [ ! -w "$output_dir" ] && { echo "Error: No write permission in '$output_dir'" >&2; error_count=$((error_count + 1)); continue; }
+
+    # Write to a temp file first and rename into place, so a failed/interrupted
+    # conversion never leaves a partial file at the final path, and the
+    # existence check above isn't racing the write itself.
+    tmp_file=$(mktemp --suffix=.xml "${output_dir}/.tmp.XXXXXX") || { echo "Error: Failed to create temp file in '$output_dir'" >&2; error_count=$((error_count + 1)); continue; }
+    # mktemp creates files at mode 0600; restore the usual umask-based permissions
+    chmod "$(printf '%o' $((0666 & ~$(umask))))" "$tmp_file"
+
+    # Convert file
+    echo "Converting '$input_file' to '$output_file'..."
+
+    if evtxexport "$input_file" > "$tmp_file" 2>/dev/null && mv -n "$tmp_file" "$output_file"; then
+        echo "✅ Success: Converted '$input_file'"
+        success_count=$((success_count + 1))
+    else
+        echo "❌ Error: Failed to convert '$input_file'" >&2
+        rm -f "$tmp_file" # Remove potentially corrupted temp file
+        error_count=$((error_count + 1))
+    fi
+done
+
+# Print summary
+echo "Completed: $success_count file(s) converted, $error_count error(s)"
+exit $(( error_count > 255 ? 255 : error_count ))

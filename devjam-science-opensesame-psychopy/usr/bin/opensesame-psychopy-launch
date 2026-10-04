@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Wrapper that activates the venv, then starts OpenSesame
+export QTWEBENGINE_CHROMIUM_FLAGS="--use-gl=egl"
+VENV_DIR="/opt/psychopy/PsychoPy/.venv"
+source "$VENV_DIR/bin/activate"
+exec opensesame "$@"

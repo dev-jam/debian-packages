@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=2
+Icon=mediainfo
+MimeType=video/*;audio/*;image/*
+Actions=mediaInfo;
+X-KDE-Priority=TopLevel
+X-KDE-StartupNotify=false
+
+[Desktop Action mediaInfo]
+Icon=mediainfo
+Exec=mediainfo-gui-multi %F
+Name=Show mediainfo
+

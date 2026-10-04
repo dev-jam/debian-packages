@@ -1,0 +1,39 @@
+#!/bin/bash
+# Change FourCC code of video files to XVID using cfourcc
+set -euo pipefail
+
+# Check if cfourcc is installed
+command -v cfourcc >/dev/null || { echo "Error: cfourcc not installed" >&2; exit 1; }
+
+# Check for arguments
+[ $# -eq 0 ] && { echo "Usage: $0 <video_file1> [<video_file2> ...]" >&2; exit 1; }
+
+success_count=0
+error_count=0
+
+# Process each input file
+for input_file in "$@"; do
+    # Check if file exists and is readable
+    [ ! -r "$input_file" ] && { echo "Error: '$input_file' not readable" >&2; error_count=$((error_count + 1)); continue; }
+
+    # Check if file is writable
+    [ ! -w "$input_file" ] && { echo "Error: '$input_file' not writable" >&2; error_count=$((error_count + 1)); continue; }
+
+    # Warn if file doesn't have a supported video extension
+    [[ ! "$input_file" =~ \.(avi|mp4|mkv)$ ]] && { echo "Warning: '$input_file' may not be a supported video file" >&2; }
+
+    # Change FourCC to XVID
+    echo "Changing FourCC of '$input_file' to XVID..."
+
+    if cfourcc -u XVID -d XVID "$input_file" 2>/dev/null; then
+        echo "✅ Success: Changed FourCC for '$input_file'"
+        success_count=$((success_count + 1))
+    else
+        echo "❌ Error: Failed to change FourCC for '$input_file'" >&2
+        error_count=$((error_count + 1))
+    fi
+done
+
+# Print summary
+echo "Completed: $success_count file(s) processed, $error_count error(s)"
+exit $(( error_count > 255 ? 255 : error_count ))

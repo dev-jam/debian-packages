@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Check FLAC files in multiple folders, sorted alphabetically and naturally
+set -euo pipefail
+
+# Check if flac is installed
+command -v flac >/dev/null || { echo "Error: flac not installed" >&2; exit 1; }
+
+# Check for arguments
+[ $# -eq 0 ] && { echo "Usage: $0 <folder1> [<folder2> ...]" >&2; exit 1; }
+
+success_count=0
+error_count=0
+
+# Process each input folder
+for folder in "$@"; do
+    # Check if folder exists
+    [ ! -d "$folder" ] && { echo "Error: '$folder' does not exist" >&2; error_count=$((error_count + 1)); continue; }
+
+    # Find subdirectories containing FLAC files
+    while IFS= read -r flac_folder; do
+        [ -z "$flac_folder" ] && continue
+
+        echo "Checking FLAC files in '$flac_folder':"
+
+        # Find and sort FLAC files naturally
+        mapfile -d '' flac_files < <(find "$flac_folder" -maxdepth 1 -type f -iname '*.flac' -print0 | sort -zV)
+
+        if [ ${#flac_files[@]} -eq 0 ]; then
+            echo "No FLAC files found in '$flac_folder'"
+            continue
+        fi
+
+        # Run flac -t on sorted files, streaming output live instead of buffering it
+        if stdbuf -oL -eL bash -c 'printf "%s\0" "$@" | xargs -0 flac -t 2>&1' _ "${flac_files[@]}"; then
+            echo "✅ Success: All FLAC files checked in '$flac_folder'"
+            success_count=$((success_count + 1))
+        else
+            echo "❌ Error: Failed to check some FLAC files in '$flac_folder'" >&2
+            error_count=$((error_count + 1))
+        fi
+    done < <(find "$folder" -type f -iname '*.flac' -exec dirname {} \; | sort -u)
+done
+
+# Print summary
+echo "Completed: $success_count folder(s) checked, $error_count error(s)"
+exit $(( error_count > 255 ? 255 : error_count ))

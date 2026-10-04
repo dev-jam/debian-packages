@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=1
+Icon=kompare
+MimeType=inode/directory;application/octet-stream;
+X-KDE-RequiredNumberOfUrls=2
+Actions=kompareFiles;
+X-KDE-Priority=TopLevel
+X-KDE-StartupNotify=false
+
+[Desktop Action kompareFiles]
+Icon=kompare
+Exec=kompare -c %U >/dev/null
+Name=Compare selected files/folder in Kompare
+

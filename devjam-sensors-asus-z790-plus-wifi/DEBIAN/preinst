@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+# Retrieve the exact motherboard model name via DMI/sysfs
+BOARD_NAME=$(cat /sys/class/dmi/id/board_name 2>/dev/null || true)
+
+# Target motherboard target definition
+TARGET_BOARD="TUF GAMING Z790-PLUS WIFI"
+
+if [ "$BOARD_NAME" != "$TARGET_BOARD" ]; then
+    echo "ERROR: This lm-sensors configuration package is strictly for '$TARGET_BOARD'." >&2
+    echo "Detected system: '$BOARD_NAME'. Installation aborted." >&2
+    exit 1
+fi
+
+exit 0

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Categories=Development;Science;
+Comment=A configuration and setting utility that helps you manage your connected eye trackers.
+Exec=/opt/TobiiProEyeTrackerManager/tobiiproeyetrackermanager %U
+GenericName=A configuration and setting utility that helps you manage your connected eye trackers.
+Icon=/usr/share/icons/hicolor/0x0/apps/tobiiproeyetrackermanager.png
+Name=TobiiProEyeTrackerManager
+StartupNotify=true
+StartupWMClass=TobiiProEyeTrackerManager
+Terminal=false
+TerminalOptions=
+Type=Application
+X-KDE-SubstituteUID=false
+X-KDE-Username=

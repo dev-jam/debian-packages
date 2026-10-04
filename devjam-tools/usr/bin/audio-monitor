@@ -1,0 +1,83 @@
+#!/bin/bash
+
+# Usage: audio-monitor [-c|--card <num|all>] [-r|--refresh <seconds>]
+#
+# This script wraps itself in `watch` on first invocation.
+# The AUDIOMON_WATCHED env var prevents infinite re-wrapping: once set,
+# the script just runs a single pass (which is what `watch` repeats).
+
+CARD_ARG="all"
+REFRESH="1"
+
+ARGS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --card)
+            ARGS+=("-c" "$2")
+            shift 2
+            ;;
+        --refresh)
+            ARGS+=("-r" "$2")
+            shift 2
+            ;;
+        *)
+            ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+set -- "${ARGS[@]}"
+
+while getopts "c:r:" opt; do
+    case "$opt" in
+        c) CARD_ARG="$OPTARG" ;;
+        r) REFRESH="$OPTARG" ;;
+        *)
+            echo "Usage: $0 [-c|--card <num|all>] [-r|--refresh <seconds>]" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [ -z "$AUDIOMON_WATCHED" ]; then
+    export AUDIOMON_WATCHED=1
+    # -t suppresses watch's own header/title entirely; we print our own below.
+    exec watch -t -n "$REFRESH" "$0" -c "$CARD_ARG" -r "$REFRESH"
+fi
+
+# Our own clean header, printed once per refresh cycle.
+echo "Audio Monitor — card: ${CARD_ARG}, refresh: ${REFRESH}s — $(date '+%H:%M:%S')"
+echo
+
+if [ "$CARD_ARG" = "all" ]; then
+    CARD_GLOB="card*"
+else
+    CARD_GLOB="card${CARD_ARG}"
+fi
+
+declare -A CARD_NAMES
+while read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*([0-9]+)[[:space:]]*\[.*\][[:space:]]*:[[:space:]]*(.+)$ ]]; then
+        num="${BASH_REMATCH[1]}"
+        remainder="${BASH_REMATCH[2]}"
+        name="${remainder#*" - "}"
+        CARD_NAMES["$num"]="$name"
+    fi
+done < /proc/asound/cards
+
+for hw in /proc/asound/${CARD_GLOB}/pcm*/sub*/hw_params; do
+    [ -e "$hw" ] || continue
+
+    card_dir="${hw#/proc/asound/card}"
+    card_num="${card_dir%%/*}"
+    name="${CARD_NAMES[$card_num]:-unknown}"
+
+    state=$(cat "$hw" 2>/dev/null)
+    first_line=$(echo "$state" | head -n1)
+
+    if [ "$first_line" != "closed" ]; then
+        echo "== card ${card_num}, ${name} =="
+        echo "$state" | grep -E '^(rate|format|channels):'
+        echo
+    fi
+done

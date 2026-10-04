@@ -1,0 +1,12 @@
+#!/bin/bash
+#
+# Extracts the microvideo from a MVIMG_*.jpg file
+
+# The offset is from the ending of the file, so calculate accordingly
+offset=$(exiv2 -p X "$1" | grep MicroVideoOffset | sed 's/.*\"\(.*\)"/\1/')
+filesize=$(du --apparent-size --block=1 "$1" | sed 's/^\([0-9]*\).*/\1/')
+extractposition=$(expr $filesize - $offset)
+echo offset: $offset
+echo filesize: $filesize
+echo extractposition=$extractposition
+dd if="$1" skip=1 bs=$extractposition of="$(basename -s .jpg $1).mp4"

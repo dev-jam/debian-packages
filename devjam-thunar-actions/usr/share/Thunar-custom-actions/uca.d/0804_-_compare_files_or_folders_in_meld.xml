@@ -1,0 +1,10 @@
+<action>
+	<icon>meld</icon>
+	<name>Compare files or folders in Meld</name>
+	<command>meld %F</command>
+	<description>Compare files or folders in Meld</description>
+	<patterns>*</patterns>
+	<directories/>
+	<other-files/>
+	<text-files/>
+</action>

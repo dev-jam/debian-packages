@@ -1,0 +1,32 @@
+[Desktop Entry]
+Type=Service
+Icon=new-audio-alarm
+MimeType=audio/*;
+Actions=convertToFlac;convertToWav;convertToMp3;convertToStereo;convertToMono
+X-KDE-Submenu=Convert Audio
+X-KDE-Priority=TopLevel
+
+[Desktop Action convertToFlac]
+Name=Convert to FLAC
+Icon=audio-x-flac
+Exec=konsole --noclose -e aud-convert-codec --flac %F
+
+[Desktop Action convertToWav]
+Name=Convert to WAV
+Icon=audio-x-wav
+Exec=konsole --noclose -e aud-convert-codec --wav %F
+
+[Desktop Action convertToMp3]
+Name=Convert to MP3 (320 kbps, Stereo)
+Icon=audio-x-mp3
+Exec=konsole --noclose -e aud-convert-codec --mp3 %F
+
+[Desktop Action convertToStereo]
+Name=Convert mono audio to stereo
+Icon=new-audio-alarm
+Exec=konsole --noclose -e aud-convert-channels --stereo %F
+
+[Desktop Action convertToMono]
+Name=Convert stereo audio to mono
+Icon=new-audio-alarm
+sExec=konsole --noclose -e aud-convert-channels --mono %F

@@ -1,0 +1,8 @@
+Package: devjam-system-config-lowlatency
+Version: 1.28-2
+Section: admin
+Priority: optional
+Architecture: all
+Recommends: devjam-tools
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Low latency tools and settings for Debian

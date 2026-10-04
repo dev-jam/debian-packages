@@ -1,0 +1,9 @@
+<action>
+	<icon>matlab.png</icon>
+	<name>Run Matlab in the background</name>
+	<command>xfce4-terminal -x matlab-run-cli-bg %f</command>
+	<description>Run Matlab in the background</description>
+	<patterns>*.m</patterns>
+	<other-files/>
+	<text-files/>
+</action>

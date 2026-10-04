@@ -1,0 +1,51 @@
+#!/bin/sh
+
+DATE=$(date +%Y-%m-%d_-_%H.%M.%S)
+
+system_dir="${HOME}/Desktop/system_info"
+extra_dir="${system_dir}/extra"
+
+info_file="${system_dir}/${DATE}_-_system_info.txt"
+report_file="${system_dir}/${DATE}_-_system_report.html"
+
+inxi_file="${extra_dir}/${DATE}_-_inxi_info.txt"
+apt_file="${extra_dir}/${DATE}_-_apt_info.txt"
+matlab_file="${extra_dir}/${DATE}_-_matlab_info.txt"
+
+mkdir -p "${system_dir}"
+mkdir -p "${extra_dir}"
+
+# Helper: check whether a program is installed (in $PATH)
+have() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+if have fastfetch; then
+    ( date; echo; fastfetch --logo none --structure Title:Separator:OS:Host:Kernel:Uptime:Packages:Shell:Display:DE:WM:WMTheme:Theme:Icons:Font:Cursor:Terminal:TerminalFont:CPU:GPU:Memory:Swap:Disk:LocalIp:Battery:PowerAdapter:Locale; ) > "${info_file}"
+else
+    ( date; echo; echo "fastfetch not installed, skipping."; ) > "${info_file}"
+fi
+
+if have inxi; then
+    ( date; echo; inxi -Ff; ) > "${inxi_file}"
+else
+    ( date; echo; echo "inxi not installed, skipping."; ) > "${inxi_file}"
+fi
+
+if have dpkg-query; then
+    ( date; echo; dpkg-query -l; ) > "${apt_file}"
+else
+    ( date; echo; echo "dpkg-query not installed, skipping."; ) > "${apt_file}"
+fi
+
+if have matlab; then
+    ( date; echo; matlab -n; ) > "${matlab_file}"
+else
+    ( date; echo; echo "matlab not installed, skipping."; ) > "${matlab_file}"
+fi
+
+if have hardinfo2; then
+    hardinfo2 -qrs -f html > "${report_file}"
+else
+    echo "hardinfo2 not installed, skipping HTML report." > "${report_file}"
+fi

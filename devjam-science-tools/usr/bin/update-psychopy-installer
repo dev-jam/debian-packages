@@ -1,0 +1,5 @@
+#!/bin/sh                                                                                                   
+
+sudo curl --output-dir /usr/local/bin -LOs https://github.com/wieluk/psychopy_linux_installer/releases/latest/download/psychopy_linux_installer
+sudo chmod +x /usr/local/bin/psychopy_linux_installer
+

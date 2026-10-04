@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenSesame (with RT priority)
+
+[Service]
+# Forward any arguments to OpenSesame
+ExecStart=/bin/bash -c 'source /opt/psychopy/PsychoPy/.venv/bin/activate; exec opensesame "$@"' --
+CPUSchedulingPolicy=rr
+CPUSchedulingPriority=40
+LimitRTPRIO=95
+LimitMEMLOCK=infinity
+StandardOutput=journal
+StandardError=journal
+StandardInput=null
+
+[Install]
+WantedBy=default.target

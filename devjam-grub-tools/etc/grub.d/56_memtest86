@@ -1,0 +1,19 @@
+#!/bin/sh
+echo 1>&2 "Adding boot menu entry for MemTest86"
+exec tail -n +4 $0
+
+submenu "Memtest86" {
+
+	if [ "${grub_platform}" = "efi" ]; then
+
+		menuentry "MemTest86 EFI" {
+			insmod chain
+			chainloader /boot/tools/efi/memtest86/BOOTX64.efi
+		}
+
+	elif [ "${grub_platform}" = "pc" ]; then
+		menuentry "MemTest86 BIOS" {
+			linux16  /boot/tools/bios/memtest86
+		}
+	fi
+}

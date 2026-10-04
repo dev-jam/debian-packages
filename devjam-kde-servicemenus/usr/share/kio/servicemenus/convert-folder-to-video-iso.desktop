@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=14
+Icon=question
+MimeType=inode/directory;
+Actions=convertFolder2VideoIso
+X-KDE-Priority=TopLevel
+
+[Desktop Action convertFolder2VideoIso]
+Name=Convert video_ts folder to video iso
+Icon=emblem-videos-symbolic
+Exec=konsole --noclose -e convert-folder-to-video-iso %F

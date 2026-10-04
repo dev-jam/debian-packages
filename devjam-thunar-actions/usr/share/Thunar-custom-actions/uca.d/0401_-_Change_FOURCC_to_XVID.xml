@@ -1,0 +1,8 @@
+<action>
+	<icon>smplayer</icon>
+	<name>Change FOURCC to XVID</name>
+	<command>cfourcc -u XVID -d XVID %F</command>
+	<description>Change FOURCC to XVID</description>
+	<patterns>*.avi;*.AVI</patterns>
+	<video-files/>
+</action>

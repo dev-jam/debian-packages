@@ -1,0 +1,203 @@
+#!/bin/bash
+set -euo pipefail
+
+RESET="\033[0m"
+CLEAR="\033[H\033[J"
+
+INTERVAL=${1:-2}
+BAR_WIDTH=40
+
+# Configurable thresholds via environment variables
+ABS_THRESHOLD=${ABS_THRESHOLD:-90}       # Absolute CPU usage % for red color
+TOP10_PERCENT=${TOP10_PERCENT:-10}      # Top N% busy non-isolated CPUs for red color
+
+GREEN="\033[0;32m"
+YELLOW="\033[1;33m"
+RED="\033[0;31m"
+
+CATEGORIES=(TIMER NET_RX BLOCK RCU)
+declare -A prev_total
+declare -A prev_idle
+
+# Expand isolcpus ranges like 2-5,7
+expand_cpus() {
+    local result=()
+    IFS=',' read -ra parts <<< "$1"
+    for p in "${parts[@]}"; do
+        if [[ "$p" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            for ((i=${BASH_REMATCH[1]}; i<=${BASH_REMATCH[2]}; i++)); do
+                result+=("$i")
+            done
+        else
+            result+=("$p")
+        fi
+    done
+    echo "${result[@]}"
+}
+
+# Gradient function for bars
+color_gradient() {
+    local pct=$1
+    local r g b
+    if [ $pct -le 50 ]; then
+        r=$((255 * pct / 50))
+        g=255
+        b=0
+    else
+        r=255
+        g=$((255 - 255 * (pct-50) / 50))
+        b=0
+    fi
+    printf "\033[38;2;%d;%d;%dm" $r $g $b
+}
+
+ISOLATED_CPUS_RAW=$(grep -oP '(?<=isolcpus=)[0-9,-]+' /proc/cmdline || echo "")
+ISOLATED_CPUS=($(expand_cpus "$ISOLATED_CPUS_RAW"))
+
+while true; do
+    echo -ne "$CLEAR"
+
+    # ====================
+    # Total system load
+    # ====================
+    total_sum=0
+    cpu_count=0
+    while read -r line; do
+        [[ "$line" =~ ^cpu([0-9]+)\ (.*) ]] || continue
+        cpu="${BASH_REMATCH[1]}"
+        stats=(${BASH_REMATCH[2]})
+        idle_time=${stats[3]}
+        total_time=0
+        for s in "${stats[@]}"; do total_time=$((total_time + s)); done
+
+        if [[ -n "${prev_total[$cpu]:-}" ]]; then
+            delta_total=$((total_time - prev_total[$cpu]))
+            delta_idle=$((idle_time - prev_idle[$cpu]))
+            usage=$((delta_total>0 ? (100*(delta_total-delta_idle)/delta_total) : 0))
+            total_sum=$((total_sum + usage))
+            cpu_count=$((cpu_count + 1))
+        fi
+        prev_total[$cpu]=$total_time
+        prev_idle[$cpu]=$idle_time
+    done < /proc/stat
+
+    total_load=0
+    [ $cpu_count -gt 0 ] && total_load=$((total_sum / cpu_count))
+
+    bar_count=$(( total_load * BAR_WIDTH / 100 ))
+    bar=""
+    for ((i=1;i<=bar_count;i++)); do
+        pct=$(( i * 100 / BAR_WIDTH ))
+        bar+=$(color_gradient $pct)"#"
+    done
+    printf "%-6s %6d%% |%s%b\n\n" "SYS" "$total_load" "$bar" "$RESET"
+
+    # ====================
+    # Header
+    # ====================
+    echo "Isolated CPUs: ${ISOLATED_CPUS[*]}"
+    echo "============================================================"
+    printf "%-6s %6s %10s %10s %10s %10s %10s %s\n" "CPU" "Load" "${CATEGORIES[@]}" "Total" "Bar"
+    echo "------------------------------------------------------------"
+
+    # ====================
+    # /proc/softirqs parsing
+    # ====================
+    declare -A cpu_vals
+    declare -A cpu_total
+    NUM_CPUS=$(grep -c '^cpu[0-9]\+' /proc/stat)
+
+    while read -r line; do
+        [[ "$line" =~ ^[[:space:]]*([A-Z0-9_]+): ]] || continue
+        cat_name="${BASH_REMATCH[1]}"
+        vals=($(echo "$line" | cut -d: -f2 | xargs))
+        for cpu in "${!vals[@]}"; do
+            for c in "${CATEGORIES[@]}"; do
+                [[ "$cat_name" == "$c" ]] && cpu_vals["$cpu,$c"]=${vals[$cpu]}
+            done
+            cpu_total[$cpu]=$(( ${cpu_total[$cpu]:-0} + ${vals[$cpu]} ))
+        done
+    done < /proc/softirqs
+
+    # ====================
+    # Per-CPU usage
+    # ====================
+    declare -A cpu_usage
+    for cpu in $(seq 0 $((NUM_CPUS-1))); do cpu_usage[$cpu]=0; done
+    while read -r line; do
+        [[ "$line" =~ ^cpu([0-9]+)\ (.*) ]] || continue
+        cpu="${BASH_REMATCH[1]}"
+        stats=(${BASH_REMATCH[2]})
+        idle_time=${stats[3]}
+        total_time=0
+        for s in "${stats[@]}"; do total_time=$((total_time + s)); done
+
+        if [[ -n "${prev_total[$cpu]:-}" ]]; then
+            delta_total=$((total_time - prev_total[$cpu]))
+            delta_idle=$((idle_time - prev_idle[$cpu]))
+            usage=$((delta_total>0 ? (100*(delta_total-delta_idle)/delta_total) : 0))
+            cpu_usage[$cpu]=$usage
+        fi
+        prev_total[$cpu]=$total_time
+        prev_idle[$cpu]=$idle_time
+    done < /proc/stat
+
+    # ====================
+    # Determine top N% busy non-isolated CPUs
+    # ====================
+    TOTALS=()
+    NON_ISOLATED=()
+    for cpu in $(seq 0 $((NUM_CPUS-1))); do
+        [[ " ${ISOLATED_CPUS[*]} " =~ " $cpu " ]] && continue
+        TOTALS+=("${cpu_usage[$cpu]:-0}")
+        NON_ISOLATED+=("$cpu")
+    done
+
+    RED_CPUS=()
+    for cpu in "${NON_ISOLATED[@]}"; do
+        [[ "${cpu_usage[$cpu]:-0}" -ge $ABS_THRESHOLD ]] && RED_CPUS+=("$cpu")
+    done
+
+    if [ ${#RED_CPUS[@]} -eq 0 ] && [ ${#TOTALS[@]} -gt 0 ]; then
+        TOPN_COUNT=$(( (${#TOTALS[@]} * TOP10_PERCENT + 99) / 100 ))
+        [ $TOPN_COUNT -lt 1 ] && TOPN_COUNT=1
+        SORTED_TOTALS=($(printf "%s\n" "${TOTALS[@]}" | sort -nr))
+        THRESHOLD=${SORTED_TOTALS[$((TOPN_COUNT-1))]:-0}
+    else
+        THRESHOLD=101
+    fi
+
+    # ====================
+    # Print per-CPU
+    # ====================
+    for cpu in $(seq 0 $((NUM_CPUS-1))); do
+        total=${cpu_total[$cpu]:-0}
+        usage=${cpu_usage[$cpu]:-0}
+
+        color="$GREEN"
+        [[ " ${ISOLATED_CPUS[*]} " =~ " $cpu " ]] && color="$YELLOW"
+        [[ ! " ${ISOLATED_CPUS[*]} " =~ " $cpu " && $usage -ge $ABS_THRESHOLD ]] && color="$RED"
+        [[ ! " ${ISOLATED_CPUS[*]} " =~ " $cpu " && $usage -ge $THRESHOLD ]] && color="$RED"
+
+        printf "%b%-6s%b %6d%%" "$color" "CPU$cpu" "$RESET" "$usage"
+
+        for c in "${CATEGORIES[@]}"; do
+            printf " %10d" "${cpu_vals[$cpu,$c]:-0}"
+        done
+
+        # Gradient bar
+        bar_count=$(( usage * BAR_WIDTH / 100 ))
+        bar=""
+        for ((i=1;i<=bar_count;i++)); do
+            pct=$(( i * 100 / BAR_WIDTH ))
+            bar+=$(color_gradient $pct)"#"
+        done
+        printf " %10d |%s%b\n" "$total" "$bar" "$RESET"
+    done
+
+    echo -e "\n$GREEN Green = Normal CPU(s) $RESET"
+    echo -e "$YELLOW Yellow = Isolated CPU(s) $RESET"
+    echo -e "$RED Red = >$ABS_THRESHOLD% usage or Top $TOP10_PERCENT% busy non-isolated CPU(s) $RESET"
+
+    sleep "$INTERVAL"
+done

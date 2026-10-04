@@ -1,0 +1,139 @@
+#!/bin/bash
+# Recompress video files to MP4 (H.264/AAC) or AVI (Xvid/MP3) using ffmpeg.
+# Usage: video-recompress [--mp4|--avi] <video_file1> [<video_file2> ...]
+# Default mode is --mp4 if no flag is specified.
+set -euo pipefail
+
+command -v ffmpeg >/dev/null || { echo "Error: ffmpeg not installed" >&2; exit 1; }
+
+# Detect once whether a terminal is available for the overwrite prompt below.
+# A bare `read` under `set -e` aborts the whole batch on EOF (e.g. run from
+# cron or with stdin redirected) instead of just skipping the one conflict -
+# so without a terminal, fall back to always skipping conflicting files.
+interactive=1
+{ [ -t 0 ] && [ -t 1 ]; } || interactive=0
+
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 [--mp4|--avi] <video_file1> [<video_file2> ...]" >&2
+    exit 1
+fi
+
+mode="mp4"
+
+case "$1" in
+    --mp4)
+        mode="mp4"
+        shift
+        ;;
+    --avi)
+        mode="avi"
+        shift
+        ;;
+    --*)
+        echo "Error: Unknown option '$1'. Use --mp4 or --avi." >&2
+        exit 1
+        ;;
+esac
+
+if [ $# -eq 0 ]; then
+    echo "Error: No input files specified." >&2
+    exit 1
+fi
+
+case "$mode" in
+    mp4)
+        ext="mp4"
+        label="MP4 (H.264/AAC)"
+        ;;
+    avi)
+        ext="avi"
+        label="AVI (Xvid/MP3)"
+        ;;
+esac
+
+success_count=0
+error_count=0
+
+for input_file in "$@"; do
+    if [ ! -r "$input_file" ]; then
+        echo "Error: '$input_file' does not exist or is not readable" >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    if [[ ! "$input_file" =~ \.(avi|mpeg|mpg|mp4|mkv|mov|wmv|flv|webm|ts|m2ts)$ ]]; then
+        echo "Warning: '$input_file' may not be a supported video file" >&2
+    fi
+
+    base_name="${input_file%.*}"
+    output_file="${base_name}_recompressed.${ext}"
+
+    if [ "$(readlink -f "$input_file")" = "$(readlink -f "$output_file")" ]; then
+        echo "Skipping '$input_file': target file is identical to source." >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    # Interactive prompt for existing file
+    if [ -e "$output_file" ]; then
+        if [ "$interactive" -eq 1 ]; then
+            echo ""
+            echo "'$output_file' already exists."
+            read -r -p "Overwrite (o) / Skip (s) / Cancel entire batch (c)? " answer
+            case "$answer" in
+                o|O) : ;;
+                s|S) continue ;;
+                c|C) echo "Recompression cancelled."; exit 1 ;;
+                *) echo "Unrecognised answer, skipping '$input_file'." >&2; continue ;;
+            esac
+        else
+            echo "Skipping '$input_file': '$output_file' already exists (no terminal available to confirm)." >&2
+            error_count=$((error_count + 1))
+            continue
+        fi
+    fi
+
+    output_dir=$(dirname "$output_file")
+    if [ ! -w "$output_dir" ]; then
+        echo "Error: No write permission in '$output_dir'" >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    # Write to a temp file first and rename into place, so a failed/interrupted
+    # recompression never leaves a partial file at the final path. Keep the
+    # real extension on the temp file so ffmpeg still infers the right muxer.
+    tmp_file=$(mktemp --suffix=".${ext}" "${output_dir}/.tmp.XXXXXX") || {
+        echo "Error: Failed to create temp file in '$output_dir'" >&2
+        error_count=$((error_count + 1))
+        continue
+    }
+    # mktemp creates files at mode 0600; restore the usual umask-based permissions
+    chmod "$(printf '%o' $((0666 & ~$(umask))))" "$tmp_file"
+
+    echo "Recompressing '$input_file' to $label as '$output_file'..."
+    ok=1
+
+    case "$mode" in
+        mp4)
+            ffmpeg -y -i "$input_file" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k -movflags +faststart "$tmp_file" -loglevel error </dev/null || ok=0
+            ;;
+        avi)
+            ffmpeg -y -i "$input_file" -c:v libxvid -q:v 5 -c:a mp3 -b:a 128k "$tmp_file" -loglevel error </dev/null || ok=0
+            ;;
+    esac
+
+    if [ "$ok" -eq 1 ] && mv -n "$tmp_file" "$output_file"; then
+        echo "✅ Success: Recompressed '$input_file'"
+        echo ""
+        success_count=$((success_count + 1))
+    else
+        echo "❌ Error: Failed to recompress '$input_file'" >&2
+        echo ""
+        rm -f "$tmp_file"
+        error_count=$((error_count + 1))
+    fi
+done
+
+echo "Completed: $success_count file(s) recompressed, $error_count error(s)"
+exit $(( error_count > 255 ? 255 : error_count ))

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+MimeType=all/allfiles;
+Actions=ConcatenateFiles
+X-KDE-AuthorizeAction=shell_access
+X-KDE-Priority=TopLevel
+X-KDE-ExcludeServiceTypes=inode/directory
+[Desktop Action ConcatenateFiles]
+Name=Concatenate Files
+Icon=emblem-debian
+Exec=sh -c 'cat "$@" > "merged_$(date +%%Y-%%m-%%d_%%H.%%M.%%S).txt"' sh %F

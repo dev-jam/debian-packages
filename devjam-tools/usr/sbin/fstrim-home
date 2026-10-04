@@ -1,0 +1,7 @@
+#!/bin/bash
+
+echo "Trimming home partition"
+
+sudo fstrim -v /home
+sleep 4
+

@@ -1,0 +1,47 @@
+# ======================================================================
+# 1. Enable TRIM / DISCARD (provisioning_mode = unmap) for SSDs & SMR
+# ======================================================================
+
+# ASMedia / Generic Enclosure (SATA SSD)
+ACTION=="add|change", SUBSYSTEM=="scsi_disk", ATTRS{idVendor}=="174c", ATTRS{idProduct}=="5136", ATTR{provisioning_mode}="unmap"
+
+# Samsung Portable SSD T5
+ACTION=="add|change", SUBSYSTEM=="scsi_disk", ATTRS{idVendor}=="04e8", ATTRS{idProduct}=="61f5", ATTR{provisioning_mode}="unmap"
+
+# Sharkoon QuickPort XT Duo Clone (Dual SATA Dock)
+ACTION=="add|change", SUBSYSTEM=="scsi_disk", ATTRS{idVendor}=="8882", ATTRS{idProduct}=="009d", ATTR{provisioning_mode}="unmap"
+
+# Transcend ESD310C (NVMe SSD)
+ACTION=="add|change", SUBSYSTEM=="scsi_disk", ATTRS{idVendor}=="2174", ATTRS{idProduct}=="2100", ATTR{provisioning_mode}="unmap"
+
+# Western Digital Elements 2620 (5TB SMR HDD)
+ACTION=="add|change", SUBSYSTEM=="scsi_disk", ATTRS{idVendor}=="1058", ATTRS{idProduct}=="2620", ATTR{provisioning_mode}="unmap"
+
+# Western Digital Elements SE 25FF (4TB SMR HDD)
+ACTION=="add|change", SUBSYSTEM=="scsi_disk", ATTRS{idVendor}=="1058", ATTRS{idProduct}=="25ff", ATTR{provisioning_mode}="unmap"
+
+
+# ======================================================================
+# 2. Block Layer: Queue Settings, Readahead & Rotational Status
+# ======================================================================
+
+# Generic Baseline: All Mechanical HDDs (Direct SATA & USB CMR HDDs, e.g., 1058:10b8) -> 2MiB Readahead
+ACTION=="add|change", SUBSYSTEM=="block", ATTR{queue/rotational}=="1", ATTR{queue/read_ahead_kb}="2048"
+
+
+## Specific SSD Overrides
+
+# Samsung Portable SSD T5 (SATA SSD -> Non-rotational, 256KB Readahead)
+ACTION=="add|change", SUBSYSTEM=="block", ATTRS{idVendor}=="04e8", ATTRS{idProduct}=="61f5", ATTR{queue/rotational}="0", ATTR{queue/read_ahead_kb}="256"
+
+# Transcend ESD310C (NVMe SSD -> Non-rotational, 512KB Readahead)
+ACTION=="add|change", SUBSYSTEM=="block", ATTRS{idVendor}=="2174", ATTRS{idProduct}=="2100", ATTR{queue/rotational}="0", ATTR{queue/read_ahead_kb}="512"
+
+
+## Specific SMR HDD Overrides (Executed AFTER baseline, cleanly overriding 2MiB to 4MiB)
+
+# WD Elements 2620 (5TB SMR HDD)
+ACTION=="add|change", SUBSYSTEM=="block", ATTRS{idVendor}=="1058", ATTRS{idProduct}=="2620", ATTR{queue/read_ahead_kb}="4096"
+
+# WD Elements SE 25FF (4TB SMR HDD)
+ACTION=="add|change", SUBSYSTEM=="block", ATTRS{idVendor}=="1058", ATTRS{idProduct}=="25ff", ATTR{queue/read_ahead_kb}="4096"

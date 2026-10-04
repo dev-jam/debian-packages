@@ -1,0 +1,8 @@
+<action>
+	<icon>audio-volume-medium</icon>
+	<name>Check FLAC files recursively</name>
+	<command>xfce4-terminal -x check-flac %N</command>
+	<description>Check FLAC files recursively</description>
+	<patterns>*</patterns>
+	<directories/>
+</action>

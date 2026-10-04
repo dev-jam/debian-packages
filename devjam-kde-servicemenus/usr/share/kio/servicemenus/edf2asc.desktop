@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=5
+MimeType=text/plain;application/octet-stream
+Icon=eyelink
+Actions=edf2asc
+X-KDE-StartupNotify=false
+X-KDE-Priority=TopLevel
+
+[Desktop Action edf2asc]
+Name=Eyelink EDF to ASC Converter
+Icon=eyelink
+Exec=edf2asc %F
+

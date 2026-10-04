@@ -1,0 +1,42 @@
+#!/bin/sh
+# Update GRUB after any kernel installation
+# This script is run automatically by dpkg post-install hooks
+
+set -e
+
+KERNEL_VERSION="$1"
+ACTION="$2"  # postinst passes "install" or "upgrade" as $2
+
+LOG_DIR="/var/log/kernel-grub"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/update.log"
+
+# ----------------------------
+# Function: check if in chroot
+# ----------------------------
+in_chroot() {
+    # Marker file for chroot
+    [ -f /.chroot ] && return 0
+
+    # Compare root of PID 1 with current root
+    if [ -d /proc/1/root ]; then
+        [ "$(readlink /proc/1/root)" != "/" ] && return 0
+    fi
+
+    return 1
+}
+
+if in_chroot; then
+    echo "$(date '+%F %T') - Skipping GRUB update: detected chroot/bootstrap environment" >> "$LOG_FILE"
+    exit 0
+fi
+
+# ----------------------------
+# Normal GRUB update
+# ----------------------------
+if [ -x /usr/sbin/update-grub-custom-experiment-mode ]; then
+    echo "$(date '+%F %T') - Updating GRUB for kernel $KERNEL_VERSION (action: $ACTION)" >> "$LOG_FILE"
+    /usr/sbin/update-grub-custom-experiment-mode >> "$LOG_FILE" 2>&1
+else
+    echo "$(date '+%F %T') - WARNING: update-grub-custom-experiment-mode not found or not executable" >> "$LOG_FILE"
+fi

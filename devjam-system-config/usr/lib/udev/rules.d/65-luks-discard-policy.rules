@@ -1,0 +1,14 @@
+# ======================================================================
+# 1. LUKS / dm-crypt TRIM & Discard Policy (UDisks2 / Desktop Environment)
+# ======================================================================
+
+# Force UDisks2 to pass 'allow-discards' when unlocking encrypted volumes
+SUBSYSTEM=="block", ENV{ID_FS_TYPE}=="crypto_LUKS", ENV{UDISKS_MOUNT_OPTIONS_DEFAULTS}="allow-discards"
+
+
+# ======================================================================
+# 2. Device Mapper Layer: User Mount Options Permissions
+# ======================================================================
+
+# Explicitly permit 'allow-discards' in user mount options for dm-crypt targets
+SUBSYSTEM=="block", ENV{DM_NAME}=="*", ENV{UDISKS_MOUNT_OPTIONS_ALLOW}="allow-discards"

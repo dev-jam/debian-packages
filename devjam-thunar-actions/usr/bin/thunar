@@ -1,0 +1,44 @@
+#!/bin/sh
+set -eu
+
+# Target directory paths
+DIR_THUNAR_SYSTEM="/usr/share/Thunar-custom-actions"
+DIR_THUNAR_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/Thunar"
+
+# XML file paths
+FILE_UCA_START="${DIR_THUNAR_SYSTEM}/start.xml"
+FILE_UCA_STOP="${DIR_THUNAR_SYSTEM}/stop.xml"
+FILE_UCA_TARGET="${DIR_THUNAR_CONFIG}/uca.xml"
+
+# Custom action directories
+DIR_UCA_SYSTEM_ACTIONS="${DIR_THUNAR_SYSTEM}/uca.d"
+DIR_UCA_USER_ACTIONS="${DIR_THUNAR_CONFIG}/uca.d"
+
+# Ensure user custom actions directory exists
+mkdir -p "${DIR_UCA_USER_ACTIONS}"
+
+# Sanity check for required template files
+if [ ! -f "${FILE_UCA_START}" ] || [ ! -f "${FILE_UCA_STOP}" ]; then
+    echo "Error: Missing required XML structure files in ${DIR_THUNAR_SYSTEM}" >&2
+    exec /usr/bin/thunar.real "$@"
+fi
+
+# Merge system actions, user actions, and structure files into uca.xml
+{
+    cat "${FILE_UCA_START}"
+    
+    # Append system-wide custom actions
+    for file in "${DIR_UCA_SYSTEM_ACTIONS}"/*.xml; do
+        [ -f "${file}" ] && cat "${file}" || true
+    done
+
+    # Append user-specific custom actions
+    for file in "${DIR_UCA_USER_ACTIONS}"/*.xml; do
+        [ -f "${file}" ] && cat "${file}" || true
+    done
+
+    cat "${FILE_UCA_STOP}"
+} > "${FILE_UCA_TARGET}.tmp" && mv "${FILE_UCA_TARGET}.tmp" "${FILE_UCA_TARGET}"
+
+# Execute the real Thunar binary and replace shell process
+exec /usr/bin/thunar.real "$@"

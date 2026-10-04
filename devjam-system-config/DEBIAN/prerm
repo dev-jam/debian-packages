@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+	remove|purge)
+
+		# Set io schedulers to system default
+		switch-io reset || true
+		;;
+esac
+
+exit 0

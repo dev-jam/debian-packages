@@ -1,0 +1,110 @@
+#!/bin/sh
+
+# List of additional packages to install
+PKGS="
+I2MC,
+PyQt6-WebEngine,
+fastnumbers,
+https://github.com/open-cogsci/opensesame-windows-build-scripts/raw/refs/heads/master/libs/expyriment-0.10.0+opensesame2-py3-none-any.whl,
+https://github.com/smathot/PyGaze/archive/refs/tags/release/0.8.8.tar.gz,
+opensesame-core,
+opensesame-extension-osweb,
+opensesame-extension-updater,
+opensesame-plugin-audio-low-latency,
+opensesame-plugin-experiment-manager,
+opensesame-plugin-eyelink,
+opensesame-plugin-media_player_mpy,
+opensesame-plugin-parallel-port-trigger,
+opensesame-plugin-psychopy,
+opensesame-plugin-radboudbox,
+opensesame-plugin-screenshot,
+opensesame-plugin-titta-eyetracking,
+opensesame-eyelink-coregraphics,
+pygame-eyelink-coregraphics,
+pipewire_python,
+psychopy_bids,
+psychopy-crs==0.0.2,
+psychopy-brainproducts,
+psychopy-eyelink,
+psychopy-eyelink-coregraphics,
+psychopy-eyetracker-sr-research,
+psychopy-legacy-mic,
+psychopy-mri-emulator,
+psychopy-pyo,
+psychopy-visionscience,
+psychopy_sounddevice,
+psychtoolbox,
+sr-research-pylink,
+seedir,
+titta,
+tittapy,
+tittaslpy
+"
+
+# Format packages into a single string without spaces or newlines for installer arguments
+PKGS_STRING=$(echo "$PKGS" | tr -d ' \n')
+
+# Function to print visual banners/separators
+print_banner() {
+    echo ""
+    echo "================================================================================"
+    echo "  $1"
+    echo "================================================================================"
+    echo ""
+}
+
+# --- INSTALLATION SUMMARY ---
+print_banner "INSTALLATION SUMMARY"
+
+echo "The following components will be installed:"
+echo ""
+echo "1. Standard PsychoPy (version: latest)"
+echo "   - Virtual environment: PsychoPy"
+echo "   - Including the following additional packages:"
+echo "     --------------------------------------------------------------------------"
+echo "$PKGS" | tr ',' '\n' | sed '/^[[:space:]]*$/d; s/^[[:space:]]*/       • /'
+echo "     --------------------------------------------------------------------------"
+echo ""
+echo "2. PsychoPy Studio"
+echo "   - Virtual environment: PsychoPy-studio"
+echo "   - WITHOUT additional packages"
+echo ""
+echo "================================================================================"
+echo ""
+
+# --- STEP 1: DOWNLOAD / UPDATE INSTALLER ---
+print_banner "[1/3] Updating / Installing PsychoPy Linux Installer..."
+echo "Downloading latest version of psychopy_linux_installer to /usr/local/bin..."
+sudo curl --output-dir /usr/local/bin -LO https://github.com/wieluk/psychopy_linux_installer/releases/latest/download/psychopy_linux_installer
+
+echo "Setting executable permissions (+x)..."
+sudo chmod +x /usr/local/bin/psychopy_linux_installer
+
+echo "psychopy_linux_installer update complete."
+
+# --- STEP 2: INSTALL STANDARD PSYCHOPY ---
+print_banner "[2/3] Installing Standard PsychoPy (with additional packages)..."
+sudo /usr/local/bin/psychopy_linux_installer \
+  --psychopy-version=latest \
+  --target-users="${SUDO_USER:-$USER}" \
+  --desktop-shortcuts=none \
+  --venv-name=PsychoPy \
+  --force-overwrite \
+  --sudo-mode=auto \
+  --log-level=info \
+  --non-interactive \
+  --additional-packages="$PKGS_STRING"
+
+# --- STEP 3: INSTALL PSYCHOPY STUDIO ---
+print_banner "[3/3] Installing PsychoPy Studio (without additional packages)..."
+sudo /usr/local/bin/psychopy_linux_installer \
+  --studio \
+  --target-users="${SUDO_USER:-$USER}" \
+  --desktop-shortcuts=none \
+  --venv-name=PsychoPy-studio \
+  --force-overwrite \
+  --sudo-mode=auto \
+  --log-level=info \
+  --non-interactive
+
+print_banner "INSTALLATION SUCCESSFULLY COMPLETED!"

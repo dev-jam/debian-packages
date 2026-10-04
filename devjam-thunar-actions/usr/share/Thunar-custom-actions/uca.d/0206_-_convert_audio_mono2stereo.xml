@@ -1,0 +1,8 @@
+<action>
+	<icon>audio-speakers</icon>
+	<name>Convert stereo audio files to mono</name>
+	<command>aud-convert-channels --stereo %N | zenity --text-info --title=&quot;Convert stereo audio files to mono&quot;</command>
+	<description>Convert stereo audio files to mono</description>
+	<patterns>*</patterns>
+	<audio-files/>
+</action>

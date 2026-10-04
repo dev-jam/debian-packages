@@ -1,0 +1,2 @@
+# Apply read permissions for the monitoring group on Intel RAPL energy attributes if present
+ACTION=="add|change", SUBSYSTEM=="powercap", KERNEL=="intel-rapl*", TEST=="energy_uj", RUN+="/usr/bin/chmod 0440 $sys$devpath/energy_uj", RUN+="/usr/bin/chgrp monitoring $sys$devpath/energy_uj"

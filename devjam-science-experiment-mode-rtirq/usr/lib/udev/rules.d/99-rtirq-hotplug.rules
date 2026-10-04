@@ -1,0 +1,4 @@
+# USB audio devices
+ACTION=="add", SUBSYSTEM=="usb", ATTR{bInterfaceClass}=="01", TAG+="systemd", ENV{SYSTEMD_WANTS}="auto-pin-audio.service"
+# Internal audio devices
+ACTION=="add", SUBSYSTEM=="sound", TAG+="systemd", ENV{SYSTEMD_WANTS}="auto-pin-audio.service"

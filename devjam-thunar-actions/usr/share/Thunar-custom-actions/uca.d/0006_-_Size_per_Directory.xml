@@ -1,0 +1,13 @@
+<action>
+	<icon>drive-harddisk</icon>
+	<name>Size per Directory</name>
+	<command>du -chs --apparent-size %N | zenity --text-info</command>
+	<description>Shows total size of selected directories and files</description>
+	<patterns>*</patterns>
+	<directories/>
+	<audio-files/>
+	<image-files/>
+	<other-files/>
+	<text-files/>
+	<video-files/>
+</action>

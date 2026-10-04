@@ -1,0 +1,8 @@
+<action>
+	<icon>audio-speakers</icon>
+	<name>To WAV</name>
+	<command>pacpl --to WAV --gui %F</command>
+	<description>To WAV</description>
+	<patterns>*</patterns>
+	<audio-files/>
+</action>

@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Service
+Icon=project_archive
+MimeType=all/all;
+Actions=tar2zstd;tar2lz4;tar2gz
+X-KDE-Submenu=Batch compress all files/folders separately
+X-KDE-Priority=TopLevel
+X-KDE-AuthorizeAction=shell_access
+X-KDE-StartupNotify=false
+
+[Desktop Action tar2zstd]
+Name=Batch compress all files/folders separately to tar with zstd
+Icon=project_archive
+Exec=konsole --noclose -e tar-all-files --zstd %F
+
+[Desktop Action tar2lz4]
+Name=Batch compress all files/folders separately to tar with lz4
+Icon=project_archive
+Exec=konsole --noclose -e tar-all-files --lz4 %F
+
+[Desktop Action tar2gz]
+Name=Batch compress all files/folders separately to tar with gzip
+Icon=project_archive
+Exec=konsole --noclose -e tar-all-files --gz %F

@@ -1,0 +1,125 @@
+#!/bin/bash
+# Create tar archives with gz, lz4, or zstd compression from files or folders.
+# Usage: tar-all-files [--gz|--lz4|--zstd] <file1_or_folder1> [<file2_or_folder2> ...]
+# Default compression is zstd if no flag is specified.
+set -euo pipefail
+
+# Check if tar is installed
+command -v tar >/dev/null || { echo "Error: tar not installed" >&2; exit 1; }
+
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 [--gz|--lz4|--zstd] <file1_or_folder1> [<file2_or_folder2> ...]" >&2
+    exit 1
+fi
+
+mode="zstd"
+
+# Determine compression program, extension, and binary availability
+case "$1" in
+    --gz)
+        mode="gz"
+        shift
+        ;;
+    --lz4)
+        mode="lz4"
+        shift
+        ;;
+    --zstd)
+        mode="zstd"
+        shift
+        ;;
+    --*)
+        echo "Error: Unknown option '$1'. Use --gz, --lz4, or --zstd." >&2
+        exit 1
+        ;;
+esac
+
+if [ $# -eq 0 ]; then
+    echo "Error: No input files or folders specified." >&2
+    exit 1
+fi
+
+case "$mode" in
+    gz)
+        command -v gzip >/dev/null || { echo "Error: gzip not installed" >&2; exit 1; }
+        compress_cmd="gzip"
+        ext="tar.gz"
+        ;;
+    lz4)
+        command -v lz4 >/dev/null || { echo "Error: lz4 not installed" >&2; exit 1; }
+        compress_cmd="lz4"
+        ext="tar.lz4"
+        ;;
+    zstd)
+        command -v zstd >/dev/null || { echo "Error: zstd not installed" >&2; exit 1; }
+        compress_cmd="zstd"
+        ext="tar.zst"
+        ;;
+esac
+
+success_count=0
+error_count=0
+
+# Process each input file or folder
+for input in "$@"; do
+    # Check if input exists and is readable
+    if [ ! -e "$input" ] || [ ! -r "$input" ]; then
+        echo "Error: '$input' does not exist or is not readable" >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    # Generate output filename
+    output_file="${input}.${ext}"
+
+    # If output file exists, append current timestamp
+    if [ -f "$output_file" ]; then
+        current_datetime=$(date +%Y%m%d_%H%M%S)
+        output_file="${input}_${current_datetime}.${ext}"
+    fi
+
+    # Check write permission for output directory
+    output_dir=$(dirname "$output_file")
+    if [ ! -w "$output_dir" ]; then
+        echo "Error: No write permission in '$output_dir'" >&2
+        error_count=$((error_count + 1))
+        continue
+    fi
+
+    # Write to a temp file first and rename into place, so a failed/interrupted
+    # archive never leaves a partial file at the final path, and the
+    # existence check above isn't racing the write itself.
+    tmp_file=$(mktemp --suffix=".${ext}" "${output_dir}/.tmp.XXXXXX") || {
+        echo "Error: Failed to create temp file in '$output_dir'" >&2
+        error_count=$((error_count + 1))
+        continue
+    }
+    # mktemp creates files at mode 0600; restore the usual umask-based permissions
+    chmod "$(printf '%o' $((0666 & ~$(umask))))" "$tmp_file"
+
+    echo "Creating archive '$output_file' from '$input' using $compress_cmd..."
+
+    ok=1
+    if [ -d "$input" ]; then
+        # For folders, archive contents without parent directory path
+        tar --use-compress-program="$compress_cmd" -cf "$tmp_file" -C "$output_dir" "$(basename "$input")" 2>/dev/null && mv -n "$tmp_file" "$output_file" || ok=0
+    else
+        # For individual files
+        tar --use-compress-program="$compress_cmd" -cf "$tmp_file" "$input" 2>/dev/null && mv -n "$tmp_file" "$output_file" || ok=0
+    fi
+
+    if [ "$ok" -eq 1 ]; then
+        echo "✅ Success: Created '$output_file'"
+        echo ""
+        success_count=$((success_count + 1))
+    else
+        echo "❌ Error: Failed to create '$output_file'" >&2
+        echo ""
+        rm -f "$tmp_file" # Remove potentially corrupted temp file
+        error_count=$((error_count + 1))
+    fi
+done
+
+# Print summary
+echo "Completed: $success_count archive(s) created, $error_count error(s)"
+exit $(( error_count > 255 ? 255 : error_count ))

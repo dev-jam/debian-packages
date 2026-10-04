@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Wrapper that activates the venv, then starts Sigmund-Analyst
+VENV_DIR="/opt/psychopy/PsychoPy/.venv"
+source "$VENV_DIR/bin/activate"
+exec sigmund-analyst "$@"

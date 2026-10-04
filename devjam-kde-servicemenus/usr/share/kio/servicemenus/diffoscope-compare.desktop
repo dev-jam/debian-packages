@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=6
+Icon=org.gnome.Meld
+MimeType=all/all;
+X-KDE-RequiredNumberOfUrls=2
+Actions=compareDiffoscope;
+X-KDE-Priority=TopLevel
+X-KDE-StartupNotify=false
+
+[Desktop Action compareDiffoscope]
+Icon=org.gnome.Meld
+Exec=konsole --hide-menubar --hide-tabbar -e compare-diffoscope %U
+Name=Compare selected files/folder in Diffoscope
+

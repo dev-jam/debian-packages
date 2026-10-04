@@ -1,0 +1,152 @@
+#!/bin/bash
+
+# Create deb packages by building directly on the host (no chroot
+# isolation) -- unlike bpo-build, this installs build-deps on the host
+# itself via mk-build-deps. Kept around for cases where you deliberately
+# want to build against the host's own installed library versions
+# rather than a clean trixie/trixie-backports chroot.
+
+set -euo pipefail
+nproc_count=$(nproc)
+export DEB_BUILD_OPTIONS="nocheck parallel=$nproc_count"
+
+# Default suite to fetch source from
+SUITE="unstable"
+
+# How to fetch the source: "apt" (default, needs deb-src enabled) or "dgit"
+# (needs no deb-src, but needs git + the dgit-repos infrastructure).
+FETCH_METHOD="apt"
+
+# Check if required tools are installed (needed regardless of fetch method)
+command -v dch >/dev/null || { echo "Error: dch not installed" >&2; exit 1; }
+command -v dpkg-buildpackage >/dev/null || { echo "Error: dpkg-buildpackage not installed" >&2; exit 1; }
+command -v mk-build-deps >/dev/null || { echo "Error: mk-build-deps not installed" >&2; exit 1; }
+
+# Parse optional flags
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --testing)
+            SUITE="testing"
+            shift
+            ;;
+        --unstable)
+            SUITE="unstable"
+            shift
+            ;;
+        --experimental)
+            SUITE="experimental"
+            shift
+            ;;
+        --apt)
+            FETCH_METHOD="apt"
+            shift
+            ;;
+        --dgit)
+            FETCH_METHOD="dgit"
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "Error: Unknown option $1" >&2
+            echo "Usage: $0 [--testing|--unstable|--experimental] [--apt|--dgit] <package1> [<package2> ...]" >&2
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# Check if at least one package argument is provided
+[ $# -eq 0 ] && { echo "Usage: $0 [--testing|--unstable|--experimental] [--apt|--dgit] <package1> [<package2> ...]" >&2; exit 1; }
+
+# Tool check specific to the chosen fetch method
+case "$FETCH_METHOD" in
+    apt)
+        command -v apt >/dev/null || { echo "Error: apt not installed" >&2; exit 1; }
+        ;;
+    dgit)
+        command -v dgit >/dev/null || { echo "Error: dgit not installed" >&2; exit 1; }
+        ;;
+esac
+
+home_dir="$HOME/build/bpo/$(date +%Y-%m-%d_%H.%M.%S)"
+mkdir -p "$home_dir" && cd "$home_dir"
+echo "Target suite: $SUITE"
+echo "Fetch method: $FETCH_METHOD"
+echo "Creating deb packages for: $*"
+
+success_count=0
+error_count=0
+
+for package in "$@"; do
+    echo "Processing '$package' from suite '$SUITE'..."
+
+    if [ "$FETCH_METHOD" = "dgit" ]; then
+        # dgit clone talks to the dgit-repos server + archive directly, so
+        # it needs no deb-src entries in sources.list.
+        if ! dgit clone "$package" "$SUITE" 2>/dev/null; then
+            echo "❌ Error: Failed to clone source for '$package' ($SUITE) via dgit" >&2
+            error_count=$((error_count + 1))
+            continue
+        fi
+        if ! cd "$package"; then
+            echo "❌ Error: Could not enter source directory for '$package'" >&2
+            error_count=$((error_count + 1))
+            cd "$home_dir"
+            continue
+        fi
+    else
+        mkdir -p "$package" && cd "$package"
+
+        # Download source from specified suite
+        if ! apt source "$package/$SUITE" 2>/dev/null; then
+            echo "❌ Error: Failed to download source for '$package' ($SUITE)" >&2
+            error_count=$((error_count + 1))
+            cd "$home_dir"
+            continue
+        fi
+
+        # Navigate into extracted directory (nullglob so an unmatched pattern
+        # expands to nothing instead of the literal string, and so we can detect
+        # "no match" vs "more than one match" explicitly rather than letting cd
+        # fail on multiple arguments)
+        shopt -s nullglob
+        extracted_dirs=("${package}"-*)
+        shopt -u nullglob
+
+        if [ "${#extracted_dirs[@]}" -ne 1 ] || ! cd "${extracted_dirs[0]}"; then
+            echo "❌ Error: Could not enter source directory for '$package'" >&2
+            error_count=$((error_count + 1))
+            cd "$home_dir"
+            continue
+        fi
+    fi
+
+    # Install build dependencies directly on the host
+    if ! sudo mk-build-deps --install --remove --tool "apt-get -y --no-remove --no-install-recommends" 2>/dev/null; then
+        echo "❌ Error: Failed to install build dependencies for '$package'" >&2
+        error_count=$((error_count + 1))
+        cd "$home_dir"
+        continue
+    fi
+
+    # Create changelog and build package
+    dch --bpo ""
+    if dpkg-buildpackage -us -uc -b 2>/dev/null; then
+        echo "✅ Success: Created deb package for '$package'"
+        cp -v ../*.deb -t "$home_dir"
+        success_count=$((success_count + 1))
+    else
+        echo "❌ Error: Failed to build deb package for '$package'" >&2
+        error_count=$((error_count + 1))
+    fi
+    cd "$home_dir"
+done
+
+# Print summary
+echo "Completed: $success_count package(s) built, $error_count error(s)"
+exit $(( error_count > 255 ? 255 : error_count ))

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Service
+Encoding=UTF-8
+Icon=application-pdf
+InitialPreference=3
+MimeType=image/*;
+Actions=concatenate2pdf
+X-KDE-StartupNotify=false
+X-KDE-Priority=TopLevel
+
+[Desktop Action concatenate2pdf]
+Name=Concatenate images to a single pdf
+Icon=application-pdf
+Exec=bash -c 'outfile="output_$(date "+%%Y-%%m-%%d_%%H-%%M-%%S").pdf"; /usr/bin/convert "$@" "$outfile"' _ %F

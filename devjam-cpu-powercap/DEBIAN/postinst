@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+
+        # Create group 'monitoring' if nonexistent
+        if ! getent group monitoring >/dev/null 2>&1; then
+            addgroup --system monitoring || groupadd -r monitoring
+        fi
+
+		# Reload udev rules and trigger events
+		if command -v udevadm >/dev/null 2>&1; then
+			udevadm control --reload || true
+			udevadm trigger || true
+		fi
+		;;
+esac
+
+exit 0

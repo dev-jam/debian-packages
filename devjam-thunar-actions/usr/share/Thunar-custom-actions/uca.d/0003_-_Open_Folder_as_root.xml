@@ -1,0 +1,8 @@
+<action>
+	<icon>dialog-warning</icon>
+	<name>Open Folder as root</name>
+	<command>pkexec thunar %f</command>
+	<description>Opens folder in root thunar</description>
+	<patterns>*</patterns>
+	<directories/>
+</action>

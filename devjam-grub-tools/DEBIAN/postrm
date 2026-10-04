@@ -1,0 +1,7 @@
+#!/bin/sh -e
+
+if [ -e /boot/grub/grub.cfg ] && [ -x "`which update-grub2 2>/dev/null`" ] ; then
+	update-grub2
+fi
+
+exit 0

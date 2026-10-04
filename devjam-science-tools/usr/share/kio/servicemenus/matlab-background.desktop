@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=6
+Icon=matlab
+MimeType=text/x-matlab
+Actions=MatlabBackground
+X-KDE-Priority=TopLevel
+
+[Desktop Action MatlabBackground]
+Name=Run Matlab in the background
+Icon=matlab
+Exec=konsole -e matlab-run-cli-bg %f

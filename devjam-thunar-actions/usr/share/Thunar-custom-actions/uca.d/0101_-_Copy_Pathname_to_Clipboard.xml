@@ -1,0 +1,13 @@
+<action>
+	<icon>xfce4-clipman-plugin</icon>
+	<name>Copy Pathname to Clipboard</name>
+	<command>echo -n %f | xclip -i</command>
+	<description>Copies file&apos;s full pathname to the X PRIMARY selection</description>
+	<patterns>*</patterns>
+	<directories/>
+	<audio-files/>
+	<image-files/>
+	<other-files/>
+	<text-files/>
+	<video-files/>
+</action>

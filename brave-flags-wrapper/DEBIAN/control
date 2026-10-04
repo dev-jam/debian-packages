@@ -1,0 +1,13 @@
+Package: brave-flags-wrapper
+Version: 2.2.0-3
+Architecture: all
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Depends: bash
+Section: web
+Priority: optional
+Description: Wrapper that applies persistent command-line flags to Brave and Brave Origin
+ Diverts the launchers /usr/bin/brave-browser-stable and /usr/bin/brave-origin-stable
+ and wraps them so flags from ~/.config/brave-flags.conf are applied, or, if
+ that file does not exist, from /etc/brave/brave-flags.conf. The flag files
+ themselves are not part of this package. Works whether or not the browsers
+ are installed.

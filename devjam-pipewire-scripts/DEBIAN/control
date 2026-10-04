@@ -1,0 +1,7 @@
+Package: devjam-pipewire-scripts
+Version: 1.1-3
+Section: sound
+Priority: optional
+Architecture: all
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Scripts to enable and disable Pulse, Pipewire and ALSA

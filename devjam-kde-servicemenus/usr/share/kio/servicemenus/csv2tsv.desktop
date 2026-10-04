@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+Icon=text-plain
+MimeType=text/csv;
+Actions=csv2tsv
+X-KDE-Priority=TopLevel
+
+[Desktop Action csv2tsv]
+Name=Convert CSV to TSV
+Icon=text-csv
+Exec=konsole --noclose -e csv2tsv %F

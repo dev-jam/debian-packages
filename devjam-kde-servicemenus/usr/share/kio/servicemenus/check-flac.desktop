@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+Icon=new-audio-alarm
+MimeType=inode/directory;
+Actions=checkFLAC
+X-KDE-Priority=TopLevel
+
+[Desktop Action checkFLAC]
+Name=Check integrity of FLAC files
+Icon=new-audio-alarm
+Exec=konsole --noclose -e check-flac %F

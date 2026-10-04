@@ -1,0 +1,121 @@
+#!/bin/bash
+# USB tree with host controller IRQs, CPU affinities, and device hierarchy
+# Corrected to preserve formatting and spacing
+
+# --- Functions ---
+
+# Get PCI IRQ number for a USB controller
+get_controller_irq() {
+    local ctrl="$1"
+    local path=$(readlink -f "$ctrl")            # e.g. /sys/devices/pci0000:00/0000:00:14.0/usb1
+    local pci=$(basename "$(dirname "$path")")  # parent directory of usbX
+    if [ -f "/sys/bus/pci/devices/$pci/irq" ]; then
+        cat "/sys/bus/pci/devices/$pci/irq"
+    fi
+}
+
+# Print IRQ info: CPU affinity, mask, interrupts
+print_irq_info() {
+    local irq="$1"
+    [ -z "$irq" ] && return
+
+    echo "  IRQ: $irq"
+
+    # CPUs allowed
+    [ -f "/proc/irq/$irq/smp_affinity_list" ] && echo "    CPUs allowed : $(cat /proc/irq/$irq/smp_affinity_list)"
+    [ -f "/proc/irq/$irq/smp_affinity" ] && echo "    Affinity mask: $(cat /proc/irq/$irq/smp_affinity)"
+
+    # Process /proc/interrupts safely
+    local line driver
+    line=$(grep -E "^[[:space:]]*$irq:" /proc/interrupts)
+    [ -n "$line" ] || return
+
+    # Extract driver name (last field)
+    driver=$(echo "$line" | awk '{print $NF}')
+
+    # Extract numeric columns (ignore first column and any non-numeric)
+    # Using awk to iterate only over numeric per-CPU counts
+    echo "    Interrupts   :"
+    awk -v drv="$driver" '
+        {
+            for(i=2;i<=NF-1;i++) {
+                if ($i ~ /^[0-9]+$/ && $i != "0") {
+                    printf "      CPU%d: %s\n", i-2, $i
+                }
+            }
+            print "      Driver: " drv
+        }' <<< "$line"
+}
+
+
+
+# Recursively print USB devices in tree
+print_device_tree() {
+    local dev="$1"
+    local indent="$2"
+    local irq="$3"
+
+    [ -e "$dev/product" ] || return
+    local id=$(basename "$dev")
+    local product=$(cat "$dev/product" 2>/dev/null)
+    local vendor=$(cat "$dev/manufacturer" 2>/dev/null)
+
+    echo "${indent}${id} : $product ($vendor) [IRQ: $irq]"
+
+    for child in "$dev"/*; do
+        [ -d "$child" ] || continue
+        [[ "$(basename "$child")" =~ ^[0-9]+(-[0-9.]+)*$ ]] || continue
+        print_device_tree "$child" "$indent  " "$irq"
+    done
+}
+
+# Show all USB controllers with IRQ info and attached devices
+show_usb_tree() {
+    echo "USB Controllers and attached devices"
+    echo "==================================="
+
+    for ctrl in /sys/bus/usb/devices/usb*; do
+        [ -d "$ctrl" ] || continue
+        local ctrlid=$(basename "$ctrl")
+        echo "Controller: $ctrlid"
+
+        local IRQ=$(get_controller_irq "$ctrl")
+        print_irq_info "$IRQ"
+
+        echo "  Devices attached:"
+        for child in "$ctrl"/*; do
+            [ -d "$child" ] || continue
+            [[ "$(basename "$child")" =~ ^[0-9]+(-[0-9.]+)*$ ]] || continue
+            print_device_tree "$child" "    " "$IRQ"
+        done
+        echo
+    done
+}
+
+# Pin a controller IRQ to specific CPUs
+pin_controller() {
+    local ctrl="$1"
+    local cpus="$2"
+    local ctrl_path="/sys/bus/usb/devices/$ctrl"
+
+    local IRQ=$(get_controller_irq "$ctrl_path")
+    [ -z "$IRQ" ] && { echo "Error: Cannot determine IRQ for $ctrl"; exit 1; }
+
+    echo "Pinning controller $ctrl (IRQ $IRQ) to CPUs: $cpus"
+    echo "$cpus" | sudo tee /proc/irq/$IRQ/smp_affinity_list > /dev/null
+}
+
+# --- Main ---
+
+if [ $# -eq 0 ]; then
+    show_usb_tree
+elif [ $# -eq 2 ]; then
+    pin_controller "$1" "$2"
+    echo
+    show_usb_tree
+else
+    echo "Usage:"
+    echo "  $0                 → show USB tree with controller IRQs and CPU affinities"
+    echo "  $0 usbX <cpus>     → pin controller IRQs to CPUs (e.g. usb1 2,3)"
+    exit 1
+fi

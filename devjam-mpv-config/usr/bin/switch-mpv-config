@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SOURCE_DIR="/usr/share/devjam/mpv"
+TARGET_DIR="${HOME}/.config/mpv"
+TARGET_FILE="${TARGET_DIR}/mpv.conf"
+
+# Helper function to extract "# profile-name: ..." from a file
+get_profile_name() {
+    local file="$1"
+    local profile_key="$2"
+    local name=""
+
+    if [[ -f "${file}" ]]; then
+        name=$(grep -i '^# *profile-name:' "${file}" | sed -E 's/^# *profile-name:[[:space:]]*//' | xargs || true)
+    fi
+
+    if [[ -z "${name}" ]]; then
+        # Fallback to capitalizing the profile parameter key (e.g., dell -> Dell)
+        name="$(tr 'a-z' 'A-Z' <<< "${profile_key:0:1}")${profile_key:1}"
+    fi
+
+    echo "${name}"
+}
+
+usage() {
+    echo "Usage: $(basename "$0") <profile_name>"
+    echo "Example: $(basename "$0") dell"
+    echo "         $(basename "$0") benq"
+    echo ""
+    echo "Available profiles in ${SOURCE_DIR}:"
+
+    if [[ -d "${SOURCE_DIR}" ]]; then
+        local found=0
+        for f in "${SOURCE_DIR}"/mpv.conf.*; do
+            if [[ -f "${f}" ]]; then
+                found=1
+                local key="${f##*.}"
+                local desc
+                desc=$(get_profile_name "${f}" "${key}")
+                printf "  %-12s (%s)\n" "${key}" "${desc}"
+            fi
+        done
+        if [[ ${found} -eq 0 ]]; then
+            echo "  (No profile files found)"
+        fi
+    else
+        echo "  (Source directory not found)"
+    fi
+    exit 1
+}
+
+# Ensure at least one argument is passed
+if [[ $# -ne 1 ]]; then
+    usage
+fi
+
+# Strip leading dashes if someone types --philips instead of philips
+PROFILE="${1#--}"
+
+# Handle help flags
+if [[ "${PROFILE}" == "help" || "${PROFILE}" == "h" ]]; then
+    usage
+fi
+
+SOURCE_FILE="${SOURCE_DIR}/mpv.conf.${PROFILE}"
+
+# Validate source file exists
+if [[ ! -f "${SOURCE_FILE}" ]]; then
+    echo "Error: Profile '${PROFILE}' not found at '${SOURCE_FILE}'." >&2
+    echo ""
+    usage
+fi
+
+# Extract display name for selected profile
+MONITOR_NAME=$(get_profile_name "${SOURCE_FILE}" "${PROFILE}")
+
+# Ensure target directory exists
+mkdir -p "${TARGET_DIR}"
+
+# Exit early if target profile is already active
+if [[ -f "${TARGET_FILE}" ]] && cmp -s "${TARGET_FILE}" "${SOURCE_FILE}"; then
+    echo "Profile [${MONITOR_NAME}] is already active. Nothing to do."
+    exit 0
+fi
+
+# Check if current mpv.conf matches ANY managed profile file in SOURCE_DIR
+is_managed_profile() {
+    local file="$1"
+    if [[ ! -f "${file}" ]]; then
+        return 1
+    fi
+
+    for ref in "${SOURCE_DIR}"/mpv.conf.*; do
+        if [[ -f "${ref}" ]] && cmp -s "${file}" "${ref}"; then
+            return 0  # Matches a known profile file
+        fi
+    done
+    return 1  # Custom or modified file
+}
+
+# Handle backups if target file exists and has custom content
+if [[ -f "${TARGET_FILE}" ]]; then
+    if is_managed_profile "${TARGET_FILE}"; then
+        echo "Current configuration matches a stock profile. Skipping backup."
+    else
+        # Keep pristine copy on first custom backup
+        ORIG_BACKUP="${TARGET_FILE}.org"
+        if [[ ! -f "${ORIG_BACKUP}" ]]; then
+            cp "${TARGET_FILE}" "${ORIG_BACKUP}"
+            echo "Saved pristine backup to: ${ORIG_BACKUP}"
+        fi
+
+        # Create timestamped backup for custom changes
+        TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+        TIME_BACKUP="${TARGET_FILE}.${TIMESTAMP}.bak"
+        cp "${TARGET_FILE}" "${TIME_BACKUP}"
+        echo "Created timestamped backup: ${TIME_BACKUP}"
+    fi
+fi
+
+# Copy target profile into place
+cp "${SOURCE_FILE}" "${TARGET_FILE}"
+echo "Successfully applied profile: [${MONITOR_NAME}] -> ${TARGET_FILE}"

@@ -1,0 +1,195 @@
+#!/bin/bash
+
+# Resume/rebuild a build-bpo source tree after manual edits, without
+# redownloading. This is the bpo-specific companion to build-bpo (fixed on
+# trixie + trixie-backports). For an arbitrary package with a plain
+# debian/ folder, use sbuild-local instead.
+#
+# Usage:
+#   bpo-resume [--allow-unstable=PKG[,PKG...]] [--revision=N] [package_hint]
+#
+# Run from:
+#   - the extracted source directory itself (has debian/changelog), or
+#   - the package directory (home_dir/package), or
+#   - the date directory (home_dir) itself, passing the package name as
+#     the last (non-flag) argument.
+#
+# Requires the same ~/.sbuildrc settings as build-bpo:
+#   $chroot_mode = 'unshare';
+#   $clean_source = 0;
+#
+# NOTE on --allow-unstable: this pins unstable to -1 (never installable)
+# except for the named source package(s) (via src:name, which also covers
+# their binaries), pinned high. The preferences file is shipped to the
+# chroot as a base64 blob via --chroot-setup-commands and decoded there
+# -- see build-bpo's comments for why (a bare %s in a hook command is a
+# reserved sbuild percent-escape token; base64 output contains no % at
+# all, so it survives untouched).
+
+set -euo pipefail
+
+BUILD_SUITE="trixie"
+
+# Comma-separated source package names (e.g. debhelper) to allow from
+# unstable, pinned via src:name (covers every binary built from that
+# source). unstable itself is pinned to -1 except for these.
+ALLOW_UNSTABLE=""
+
+# If set (via --revision=N), overrides the backport build number (the
+# digits after the last "+" in the ~bpoXX+N suffix) via dch --newversion
+# before rebuilding -- e.g. after a --pause edit you want a new build
+# number for.
+REVISION=""
+
+package_hint=""
+allow_unstable_set=0
+
+command -v sbuild >/dev/null || { echo "Error: sbuild not installed" >&2; exit 1; }
+command -v base64 >/dev/null || { echo "Error: base64 not installed" >&2; exit 1; }
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --allow-unstable=*)
+            ALLOW_UNSTABLE="${1#*=}"
+            allow_unstable_set=1
+            shift
+            ;;
+        --revision=*)
+            REVISION="${1#*=}"
+            if ! [[ "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: --revision needs a positive integer, got '$REVISION'" >&2
+                exit 1
+            fi
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "Error: Unknown option $1" >&2
+            echo "Usage: $0 [--allow-unstable=PKG[,PKG...]] [--revision=N] [package_hint]" >&2
+            exit 1
+            ;;
+        *)
+            package_hint="$1"
+            shift
+            ;;
+    esac
+done
+
+if [ -n "$REVISION" ]; then
+    command -v dch >/dev/null || { echo "Error: dch not installed" >&2; exit 1; }
+    command -v dpkg-parsechangelog >/dev/null || { echo "Error: dpkg-parsechangelog not installed" >&2; exit 1; }
+fi
+
+# Find the source directory (the one containing debian/changelog),
+# searching at most two levels down from where we're standing.
+find_source_dir() {
+    if [ -f debian/changelog ]; then
+        printf '%s\n' "$PWD"
+        return 0
+    fi
+
+    shopt -s nullglob
+    local candidates=(*/)
+    if [ -n "$package_hint" ]; then
+        candidates=("${package_hint}"*/)
+    fi
+
+    for d1 in "${candidates[@]}"; do
+        if [ -f "${d1}debian/changelog" ]; then
+            printf '%s\n' "$PWD/${d1%/}"
+            shopt -u nullglob
+            return 0
+        fi
+        for d2 in "${d1}"*/; do
+            if [ -f "${d2}debian/changelog" ]; then
+                printf '%s\n' "$PWD/${d2%/}"
+                shopt -u nullglob
+                return 0
+            fi
+        done
+    done
+    shopt -u nullglob
+    return 1
+}
+
+src_dir=$(find_source_dir) || {
+    echo "❌ Error: Could not find a source tree (debian/changelog) from here." >&2
+    echo "   Run this from the source dir, the package dir, or the date dir + package name." >&2
+    exit 1
+}
+
+# home_dir is two levels above the source dir (home_dir/package/package-version)
+home_dir=$(dirname "$(dirname "$src_dir")")
+nproc_count=$(nproc)
+
+# Pick up the --allow-unstable value bpo-build remembered, one directory
+# above the source tree, unless this invocation explicitly overrides it
+# (including explicitly clearing it with --allow-unstable=).
+state_file="$(dirname "$src_dir")/.bpo-allow-unstable"
+if [ "$allow_unstable_set" -eq 0 ] && [ -f "$state_file" ]; then
+    ALLOW_UNSTABLE="$(cat "$state_file")"
+    [ -n "$ALLOW_UNSTABLE" ] && echo "(picked up --allow-unstable=$ALLOW_UNSTABLE from the earlier bpo-build run)"
+fi
+
+cd "$src_dir"
+
+if [ -n "$REVISION" ]; then
+    current_version=$(dpkg-parsechangelog -S Version)
+    current_distribution=$(dpkg-parsechangelog -S Distribution)
+    # Replace the "+N" backport build number (e.g.
+    # "1.2.3-1~bpo13+1" -> "1.2.3-1~bpo13+$REVISION").
+    if [[ "$current_version" =~ ^(.*~bpo[0-9]+\+)[0-9]+$ ]]; then
+        new_version="${BASH_REMATCH[1]}${REVISION}"
+        # --distribution keeps it on the existing distribution; dch
+        # --newversion would otherwise default a new stanza's
+        # distribution to UNRELEASED, which lintian treats as an error.
+        # --date guarantees a timestamp strictly later than the existing
+        # top entry; without it, two entries can land in the same second
+        # and lintian flags latest-changelog-entry-without-new-date.
+        dch --newversion "$new_version" --distribution "$current_distribution" \
+            --date "$(date -R -d '+1 second')" \
+            "Rebuild with backport revision +$REVISION"
+    else
+        echo "⚠️  Warning: could not find a ~bpoXX+N suffix in '$current_version', skipping --revision" >&2
+    fi
+fi
+
+sbuild_args=(-d "$BUILD_SUITE"
+    --extra-repository="deb http://deb.debian.org/debian ${BUILD_SUITE}-backports main"
+    --profiles=nocheck
+    -j"$nproc_count"
+    --build-dir="$home_dir")
+
+if [ -n "$ALLOW_UNSTABLE" ]; then
+    pin_file="/etc/apt/preferences.d/99-unstable-allowlist"
+    # Pin by source package (src:name) rather than listing binaries --
+    # apt_preferences resolves this to every binary built from that
+    # source (e.g. src:debhelper covers both debhelper and
+    # libdebhelper-perl). See build-bpo's comments for the full history
+    # of why this ended up as a base64 blob through --chroot-setup-commands.
+    src_pkglist=""
+    for pkg in ${ALLOW_UNSTABLE//,/ }; do
+        src_pkglist="${src_pkglist}src:${pkg} "
+    done
+    src_pkglist="${src_pkglist% }"
+
+    sbuild_args+=(--chroot-setup-commands="sh -c \"echo 'deb http://deb.debian.org/debian unstable main' > /etc/apt/sources.list.d/99-unstable.list && echo 'Added unstable apt source:' && echo && cat /etc/apt/sources.list.d/99-unstable.list && echo\"")
+
+    pin_content=$(printf '%s\n' \
+        "Package: *" "Pin: release a=unstable" "Pin-Priority: -1" "" \
+        "Package: ${src_pkglist}" "Pin: release a=unstable" "Pin-Priority: 990")
+    pin_content_b64=$(printf '%s' "$pin_content" | base64 -w0)
+
+    sbuild_args+=(--chroot-setup-commands="sh -c \"echo ${pin_content_b64} | base64 -d > ${pin_file} && echo 'Wrote unstable apt pin preferences:' && echo && cat ${pin_file} && echo\"")
+    sbuild_args+=(--chroot-setup-commands="apt-get update -qq")
+fi
+
+echo "Source:    $src_dir"
+echo "Build-dir: $home_dir"
+[ -n "$REVISION" ] && echo "Backport revision: ~bpoXX+$REVISION"
+[ -n "$ALLOW_UNSTABLE" ] && echo "From unstable (only): $ALLOW_UNSTABLE"
+
+sbuild "${sbuild_args[@]}" .

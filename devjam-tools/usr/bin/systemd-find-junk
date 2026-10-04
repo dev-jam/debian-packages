@@ -1,0 +1,112 @@
+#!/bin/sh -e
+# Find old systemd/disk cruft:
+#   1. Dangling systemd unit-enablement symlinks - a leftover from a package
+#      that was removed without disabling its units first.
+#   2. Stale /etc/fstab entries referencing a UUID/LABEL/device that no
+#      longer exists - a leftover from a disk that was removed/replaced.
+#
+# Section 1 deliberately does NOT use `systemctl --state=not-found` plus its
+# reported relations (After=/Before=/PartOf=/ConflictedBy=/WantedBy=/etc.),
+# because that also reports every perfectly normal *soft* reference a still-
+# installed unit makes toward an alternative/companion unit that was simply
+# never installed - e.g. power-profiles-daemon.service declaring
+# Conflicts=tlp.service is not evidence tlp.service ever existed, it's just
+# packaging metadata for an alternative. There is no reliable way to tell
+# that apart from genuine leftover cruft using relation type alone. A broken
+# symlink on disk is unambiguous: it only exists because something was
+# enabled and then removed without being disabled first.
+
+# tput fails outright (exit 2) if $TERM is unset, and "succeeds" with -1
+# colors for a colorless terminal (e.g. TERM=dumb) - both are common in
+# cron/non-interactive contexts. Under `set -e` an outright tput failure
+# would abort the whole script before it does anything useful, so check
+# color support first and fall back to plain output instead.
+if NCOLORS=$(tput colors 2>/dev/null) && [ "${NCOLORS}" -ge 8 ] 2>/dev/null; then
+  COLOR_CYAN=$(tput setaf 6)
+  COLOR_YELLOW=$(tput setaf 3)
+  COLOR_RED=$(tput setaf 1)
+  COLOR_OFF=$(tput sgr0)
+else
+  COLOR_CYAN=""
+  COLOR_YELLOW=""
+  COLOR_RED=""
+  COLOR_OFF=""
+fi
+
+check_symlinks() {
+  # /etc/systemd/system holds admin-managed enablement (*.wants/,
+  # *.requires/, and manual overrides); /run/systemd/system holds the same
+  # for runtime-generated units. Both are where a dangling enable-symlink
+  # would live.
+  SEARCH_DIRS="/etc/systemd/system /run/systemd/system"
+
+  # shellcheck disable=SC2086 # SEARCH_DIRS is a fixed, script-defined list
+  # of paths with no spaces in them - splitting it into separate find(1)
+  # arguments is intentional, not user-controlled data.
+  LINKS="$(find ${SEARCH_DIRS} -xtype l 2>/dev/null)" || true
+
+  if [ -z "${LINKS}" ]; then
+    echo "No dangling systemd unit-enablement symlinks found."
+    return
+  fi
+
+  echo "${LINKS}" | while IFS= read -r LINK
+  do
+    TARGET="$(readlink "${LINK}")"
+    printf "%s%s%s -> %s%s%s %s(missing)%s\n" \
+      "${COLOR_CYAN}" "${LINK}" "${COLOR_OFF}" \
+      "${COLOR_YELLOW}" "${TARGET}" "${COLOR_OFF}" \
+      "${COLOR_RED}" "${COLOR_OFF}"
+  done
+}
+
+check_fstab() {
+  if [ ! -r /etc/fstab ]; then
+    echo "Warning: /etc/fstab not readable, skipping." >&2
+    return
+  fi
+  if [ ! -d /dev/disk ]; then
+    echo "Warning: /dev/disk not present, skipping (no udev device symlinks to check against)." >&2
+    return
+  fi
+
+  echo "(A missing device here can also just mean a removable/external disk that isn't plugged in right now - check before removing an entry. Also note: this compares UUID/LABEL text case-sensitively, so a hand-edited entry with different letter case than the actual disk would show up here too, without actually being stale.)"
+
+  STALE=0
+  TAB="$(printf '\t')"
+  while IFS=" ${TAB}" read -r DEVSPEC MOUNTPOINT FSTYPE REST
+  do
+    case "${DEVSPEC}" in
+      \#*|'') continue ;;
+    esac
+    case "${FSTYPE}" in
+      swap|tmpfs|proc|sysfs|devpts|cgroup|cgroup2|overlay|nfs|nfs4|cifs|none|auto) continue ;;
+    esac
+    case "${DEVSPEC}" in
+      UUID=*)      DEVNODE="/dev/disk/by-uuid/${DEVSPEC#UUID=}" ;;
+      LABEL=*)     DEVNODE="/dev/disk/by-label/${DEVSPEC#LABEL=}" ;;
+      PARTUUID=*)  DEVNODE="/dev/disk/by-partuuid/${DEVSPEC#PARTUUID=}" ;;
+      PARTLABEL=*) DEVNODE="/dev/disk/by-partlabel/${DEVSPEC#PARTLABEL=}" ;;
+      /dev/*)      DEVNODE="${DEVSPEC}" ;;
+      *)           continue ;;  # not a device identifier we can check (e.g. a network share)
+    esac
+
+    if [ ! -e "${DEVNODE}" ]; then
+      printf "%s%s%s (mount point %s%s%s) -> %s%s%s not present\n" \
+        "${COLOR_CYAN}" "${DEVSPEC}" "${COLOR_OFF}" \
+        "${COLOR_YELLOW}" "${MOUNTPOINT}" "${COLOR_OFF}" \
+        "${COLOR_RED}" "${DEVNODE}" "${COLOR_OFF}"
+      STALE=1
+    fi
+  done < /etc/fstab
+
+  if [ "${STALE}" -eq 0 ]; then
+    echo "No stale /etc/fstab device entries found."
+  fi
+}
+
+echo "${COLOR_CYAN}== Dangling systemd unit-enablement symlinks ==${COLOR_OFF}"
+check_symlinks
+echo
+echo "${COLOR_CYAN}== Stale /etc/fstab device entries ==${COLOR_OFF}"
+check_fstab

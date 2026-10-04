@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=Switch to ALSA only mode
+GenericName=Switch to ALSA only mode
+Comment=Disable Pulse and Pipewire and only use ALSA
+Exec=switch2alsa
+Icon=audio-on
+StartupNotify=true
+Type=Application
+Categories=AudioVideo;

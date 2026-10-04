@@ -1,0 +1,6 @@
+#!/bin/bash                                                                                                   
+
+diffoscope "$1" "$2"
+
+echo "Press [ENTER] to terminate"
+read -s

@@ -1,0 +1,8 @@
+<action>
+	<icon>audio-speakers</icon>
+	<name>To MP3</name>
+	<command>pacpl --to MP3 --bitrate 320 --gui %F</command>
+	<description>To MP3</description>
+	<patterns>*</patterns>
+	<audio-files/>
+</action>

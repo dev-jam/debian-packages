@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -e
+
+printf "\n"
+printf "Build live image from scratch...\n\n"
+
+printf "\n"
+printf "Cleaning environment...\n\n"
+
+sudo lb clean
+
+printf "\n\n"
+printf "Configuring build environment...\n\n"
+
+lb config
+
+printf "\n\n"
+printf "Building live image...\n\n"
+
+sudo lb build
+
+printf "\n\n"
+printf "Building done.\n\n"

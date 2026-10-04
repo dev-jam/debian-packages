@@ -1,0 +1,8 @@
+Package: devjam-gpu-x11-xlibre-tearfree-amdgpu
+Version: 1.5-3
+Section: x11
+Priority: optional
+Architecture: all
+Recommends: xlibre
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Tearfree improvements to the amdgpu driver

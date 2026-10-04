@@ -1,0 +1,8 @@
+<action>
+	<icon>dialog-warning</icon>
+	<name>Convert VIDEO-TS to iso</name>
+	<command>convert-folder-to-video-iso %N</command>
+	<description>Convert VIDEO-TS to iso</description>
+	<patterns>*</patterns>
+	<directories/>
+</action>

@@ -1,0 +1,54 @@
+#!/bin/bash
+# Create DVD ISO files from DVD folders using genisoimage
+set -euo pipefail
+
+# Check if genisoimage is installed
+command -v genisoimage >/dev/null || { echo "Error: genisoimage not installed" >&2; exit 1; }
+
+# Check for arguments
+[ $# -eq 0 ] && { echo "Usage: $0 <folder1> [<folder2> ...]" >&2; exit 1; }
+
+success_count=0
+error_count=0
+
+# Process each input folder
+for input in "$@"; do
+    # Check if folder exists
+    [ ! -d "$input" ] && { echo "Error: '$input' does not exist" >&2; error_count=$((error_count + 1)); continue; }
+
+    # Generate output filename
+    output_file="${input}.iso"
+
+    # If output file exists, append current date and time
+    if [ -f "$output_file" ]; then
+        current_datetime=$(date +%Y%m%d_%H%M%S)
+        output_file="${input}_${current_datetime}.iso"
+    fi
+
+    # Check write permission
+    output_dir=$(dirname "$output_file")
+    [ ! -w "$output_dir" ] && { echo "Error: No write permission in '$output_dir'" >&2; error_count=$((error_count + 1)); continue; }
+
+    # Write to a temp file first and rename into place, so a failed/interrupted
+    # run never leaves a partial ISO at the final path, and the existence
+    # check above isn't racing the write itself.
+    tmp_file=$(mktemp --suffix=.iso "${output_dir}/.tmp.XXXXXX") || { echo "Error: Failed to create temp file in '$output_dir'" >&2; error_count=$((error_count + 1)); continue; }
+    # mktemp creates files at mode 0600; restore the usual umask-based permissions
+    chmod "$(printf '%o' $((0666 & ~$(umask))))" "$tmp_file"
+
+    # Create ISO
+    echo "Creating ISO '$output_file' from '$input'..."
+
+    if genisoimage -dvd-video -o "$tmp_file" "$input" 2>/dev/null && mv -n "$tmp_file" "$output_file"; then
+        echo "✅ Success: Created '$output_file'"
+        success_count=$((success_count + 1))
+    else
+        echo "❌ Error: Failed to create '$output_file'" >&2
+        rm -f "$tmp_file" # Remove potentially corrupted temp file
+        error_count=$((error_count + 1))
+    fi
+done
+
+# Print summary
+echo "Completed: $success_count ISO(s) created, $error_count error(s)"
+exit $(( error_count > 255 ? 255 : error_count ))

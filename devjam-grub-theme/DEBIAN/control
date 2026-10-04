@@ -1,0 +1,7 @@
+Package: devjam-grub-theme
+Version: 1.1-5
+Section: admin
+Priority: optional
+Architecture: all
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Grub boot theme by devjam

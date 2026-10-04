@@ -1,0 +1,7 @@
+Package: devjam-system-config
+Version: 1.23-3
+Section: admin
+Priority: optional
+Architecture: all
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Generic configs by devjam

@@ -1,0 +1,28 @@
+#!/bin/sh
+echo 1>&2 "Adding boot menu entry for Super Grub2 Disk"
+exec tail -n +4 $0
+
+submenu "Super Grub2 Disk" {
+
+	if [ "${grub_platform}" = "efi" ]; then
+
+		menuentry "Super Grub2 Disk 2.06s4 EFI" {
+			insmod chain
+			chainloader /boot/tools/efi/supergrub2-classic-2.06s4-x86_64_efi-STANDALONE.EFI
+		}
+
+	elif [ "${grub_platform}" = "pc" ]; then
+
+		menuentry "Super Grub2 Disk 2.06s4 ISO loopback BIOS" {
+			iso_path=/boot/tools/bios/supergrub2-classic-2.06s4-multiarch-CD.iso
+			export iso_path
+			search --set=root --file $iso_path
+			loopback loop $iso_path
+			root=(loop)
+			configfile /boot/grub/loopback.cfg
+			loopback --delete loop
+		}
+
+	fi
+
+}

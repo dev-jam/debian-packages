@@ -1,0 +1,14 @@
+#!/bin/bash
+
+if ls /sys/block/sd* 1> /dev/null 2>&1; then
+	for f in /sys/block/sd?/queue/scheduler; do printf "%s is: " "$f"; cat "$f"; done
+fi
+
+if ls /sys/block/nvme* 1> /dev/null 2>&1; then
+	for f in /sys/block/nvme?n?/queue/scheduler; do printf "%s is: " "$f"; cat "$f"; done
+fi
+
+if ls /sys/block/mmcblk* 1> /dev/null 2>&1; then
+	for f in /sys/block/mmcblk?/queue/scheduler; do printf "%s is: " "$f"; cat "$f"; done
+fi
+

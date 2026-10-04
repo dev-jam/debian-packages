@@ -1,0 +1,24 @@
+# profile-name: BenQ PD2700U
+#
+# ==============================================================================
+# Global settings (applied in all environments)
+# ==============================================================================
+
+# Default: Do not send colorspace hints to the compositor
+target-colorspace-hint=no
+
+# --- HDR to SDR Tone-Mapping for BenQ PD2700U (350 nits IPS) ---
+vo=gpu-next
+target-peak=350
+tone-mapping=bt.2446a
+tone-mapping-visualize-display=no
+hdr-compute-peak=yes
+
+# ==============================================================================
+# Conditional profiles
+# ==============================================================================
+
+# Enable target-colorspace-hint ONLY under Wayland when playing HDR content
+[hdr-wayland-only]
+profile-cond=os.getenv("XDG_SESSION_TYPE") == "wayland" and (p["video-params/primaries"] == "bt.2020" or p["video-params/gamma"] == "pq" or p["video-params/gamma"] == "hlg")
+target-colorspace-hint=yes

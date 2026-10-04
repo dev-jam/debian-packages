@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Service
+Icon=text-plain
+MimeType=all/all;
+#MimeType=application/x-ms-evtx;
+Actions=evtx2xml
+X-KDE-Priority=TopLevel
+
+[Desktop Action evtx2xml]
+Name=Convert evtx files to xml
+Icon=image-vnd.microsoft.icon
+Exec=konsole --noclose -e evtx2xml %F
+

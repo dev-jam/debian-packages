@@ -1,0 +1,10 @@
+Package: apt-cleaner
+Version: 1.0-2
+Architecture: all
+Maintainer: Local Administrator <admin@localhost>
+Depends: apt, sudo
+Section: admin
+Priority: optional
+Description: APT package cleanup tool for KDE Plasma
+ Opens a terminal window to run apt-get autoremove --purge and apt-get clean,
+ displays a completion status message, and waits for user interaction before exiting.

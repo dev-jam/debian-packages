@@ -1,0 +1,8 @@
+Package: devjam-thunar-actions
+Version: 3.5-5
+Section: xfce
+Priority: optional
+Architecture: all
+Recommends: thunar, thunar-archive-plugin, thunar-gtkhash, catfish, imagemagick, zenity, mediainfo-gui, gnupg, gnupg2, baobab, inotify-tools, pacpl, meld, genisoimage, mkvtoolnix, coreutils, cfourcc, mediainfo, ffmpeg, devjam-tools, fclones, zstd, devjam-tools
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Thunar custom actions collection

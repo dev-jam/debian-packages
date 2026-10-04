@@ -1,0 +1,7 @@
+#!/bin/sh
+
+systemctl --user mask pipewire.socket
+systemctl --user mask pipewire.service
+
+systemctl --user mask pipewire-pulse.socket
+systemctl --user mask pipewire-pulse.service

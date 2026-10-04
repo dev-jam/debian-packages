@@ -1,0 +1,8 @@
+<action>
+	<icon>media-optical-video</icon>
+	<name>Convert video files to MP4 lossy</name>
+	<command>vid-convert-codec --mp4 %N | zenity --text-info --title=&quot;Convert video files to MP4 lossy&quot;</command>
+	<description>Convert video files to MP4 lossy</description>
+	<patterns>*</patterns>
+	<video-files/>
+</action>

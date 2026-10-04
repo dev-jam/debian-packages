@@ -1,0 +1,8 @@
+Package: devjam-sensors-asus-z790-plus-wifi
+Version: 1.0-3
+Section: utils
+Priority: optional
+Architecture: all
+Recommends: lm-sensors
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: lm-sensor config for the ASUS TUF Gaming Z790-Plus WiFi mainboard

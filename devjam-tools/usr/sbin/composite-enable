@@ -1,0 +1,4 @@
+#!/bin/sh
+
+## Enable compositing
+cp "/usr/share/composite/21-enable-compositing.conf" "/etc/X11/xorg.conf.d/21-compositing.conf"

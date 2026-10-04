@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=39
+Icon=system-file-manager
+Actions=OpenAsRootKDE5
+MimeType=inode/directory;inode/directory-locked
+X-KDE-Priority=TopLevel
+
+[Desktop Action OpenAsRootKDE5]
+Exec=dolphin admin://%U
+Icon=system-file-manager
+Name=Open as Root
+Name[ru]=Открыть папку с правами рут
+Name[ua]=Відкрити папку з правами рут

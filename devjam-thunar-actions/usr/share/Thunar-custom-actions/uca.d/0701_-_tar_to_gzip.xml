@@ -1,0 +1,13 @@
+<action>
+	<icon>project_archive</icon>
+	<name>Batch compress all files/folders separately to tar with gzip</name>
+	<command>tar-all-files --gz %N | zenity --text-info --no-wrap --title=&quot;Batch compress all files/folders with gzip&quot; </command>
+	<description>Batch compress all files/folders separately to tar with gzip</description>
+	<patterns>*</patterns>
+	<directories/>
+	<audio-files/>
+	<image-files/>
+	<other-files/>
+	<text-files/>
+	<video-files/>
+</action>

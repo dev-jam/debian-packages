@@ -1,0 +1,54 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+	configure)
+
+		# Only install or refresh config if missing or template differs
+		if [ ! -f /etc/rtirq.conf ] || ! cmp -s /usr/share/devjam/rtirq/rtirq.conf /etc/rtirq.conf; then
+			cp -a /usr/share/devjam/rtirq/rtirq.conf /etc/rtirq.conf 2>/dev/null || true
+		fi
+
+		# Reload udev rules and trigger events
+		if command -v udevadm >/dev/null 2>&1; then
+			udevadm control --reload || true
+			udevadm trigger || true
+		fi
+
+		if command -v systemctl >/dev/null 2>&1; then
+
+			# Reload systemd daemon
+			systemctl daemon-reload || true
+
+			# Start/Restart rtirq only if enabled
+			if systemctl is-enabled --quiet rtirq.service; then
+				if systemctl is-active --quiet rtirq.service; then
+					systemctl restart rtirq.service || true
+				else
+					systemctl start rtirq.service || true
+				fi
+			fi
+
+			# Fresh install: enable and start auto-pin-audio.
+			# Upgrade: preserve the current enabled/disabled and active/inactive state.
+			if [ -z "$2" ]; then
+				# Fresh install
+				systemctl enable --now auto-pin-audio.service || true
+			else
+				# Upgrade
+				if systemctl is-active --quiet auto-pin-audio.service; then
+					systemctl restart auto-pin-audio.service || true
+				fi
+			fi									
+		fi
+
+		# Update grub experiment mode
+		if command -v update-grub >/dev/null 2>&1; then
+			update-grub-custom-experiment-mode || true
+			update-grub || true
+		fi
+		;;
+esac
+
+exit 0
+

@@ -1,0 +1,26 @@
+#!/bin/bash
+set -e
+
+echo "=========================================="
+echo "         APT System Cleanup               "
+echo "=========================================="
+echo "Requesting root privileges..."
+echo ""
+
+# Execute APT cleanup commands using sudo
+if sudo apt-get autoremove --purge -y && sudo apt-get clean; then
+    echo ""
+    echo "=========================================="
+    echo "Cleanup completed successfully!"
+    echo "Press Enter or close this window to exit."
+    echo "=========================================="
+else
+    echo ""
+    echo "=========================================="
+    echo "An error occurred during cleanup."
+    echo "Press Enter or close this window to exit."
+    echo "=========================================="
+fi
+
+# Pause execution so the terminal remains open
+read -r

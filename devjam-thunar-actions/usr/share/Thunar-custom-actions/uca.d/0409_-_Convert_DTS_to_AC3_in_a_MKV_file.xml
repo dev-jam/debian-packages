@@ -1,0 +1,8 @@
+<action>
+	<icon>audio-volume-medium</icon>
+	<name>Convert DTS to AC3 in a MKV file</name>
+	<command>mkvdts2ac3 -v --new -w %d %f | zenity --text-info --no-wrap --title=&quot;Convert DTS to AC3 in a MKV file&quot; </command>
+	<description>Convert DTS to AC3 in a MKV file</description>
+	<patterns>*.mkv;*.MKV</patterns>
+	<video-files/>
+</action>

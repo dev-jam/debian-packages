@@ -1,0 +1,27 @@
+#!/bin/bash
+# Minimal verification of RTIRQ IRQ pinning
+# Only checks what RTIRQ did on boot
+# Must be run as root for /proc/irq access
+
+RTIRQ_CONF="/etc/rtirq.conf"
+
+# --- Read driver list ---
+RTIRQ_NAME_LIST=$(grep -E '^RTIRQ_NAME_LIST=' "$RTIRQ_CONF" | cut -d'=' -f2- | tr -d '"')
+IFS=' ' read -r -a DRIVERS <<< "$RTIRQ_NAME_LIST"
+
+echo "=== RTIRQ Verification ==="
+echo "Date: $(date)"
+echo
+
+for driver in "${DRIVERS[@]}"; do
+    echo "Driver: $driver"
+    grep -i "$driver" /proc/interrupts | while read -r line; do
+        irq_num=$(echo "$line" | awk -F: '{print $1}' | tr -d ' ')
+        irq_name=$(echo "$line" | awk '{print $NF}')
+        affinity_file="/proc/irq/$irq_num/smp_affinity_list"
+        [ ! -f "$affinity_file" ] && continue
+        affinity=$(cat "$affinity_file")
+        echo "  IRQ $irq_num ($irq_name) -> CPUs: $affinity"
+    done
+    echo
+done

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=OpenSesame 4.1 with PsychoPy (RT Priority)
+GenericName=Graphical experiment builder for the social sciences
+Comment=Graphical experiment builder for the social sciences
+Exec=systemctl --user start opensesame-psychopy-rt
+Icon=opensesame
+Terminal=false
+Categories=Development;IDE;Science;Education;
+StartupNotify=true
+MimeType=application/x-opensesame-experiment
+

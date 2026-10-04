@@ -1,0 +1,10 @@
+[Desktop Entry]
+Categories=HardwareSettings;System;Settings;
+Exec=print-system-information
+Icon=show-gpu-effects
+Name=Print System Information
+GenericName=Print hardware and software information report
+StartupNotify=true
+Terminal=true
+Type=Application
+

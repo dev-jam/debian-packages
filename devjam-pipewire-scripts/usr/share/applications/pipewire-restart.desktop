@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=Restart Pipewire
+GenericName=Restart Pipewire
+Comment=Restart the Pipewire server
+Exec=pipewire-restart
+Icon=audio-on
+StartupNotify=true
+Type=Application
+Categories=AudioVideo;

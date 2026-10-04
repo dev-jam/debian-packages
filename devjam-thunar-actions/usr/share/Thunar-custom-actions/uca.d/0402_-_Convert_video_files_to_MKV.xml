@@ -1,0 +1,8 @@
+<action>
+	<icon>media-optical-video</icon>
+	<name>Convert video files MKV lossless</name>
+	<command>vid-convert-container --mkv %N | zenity --text-info --title=&quot;Convert video files to MKV lossless&quot;</command>
+	<description>Convert video files to MKV lossless</description>
+	<patterns>*</patterns>
+	<video-files/>
+</action>

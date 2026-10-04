@@ -1,0 +1,8 @@
+#!/bin/sh
+
+## Update system rules PsychToolbox
+
+cp '/usr/share/psychtoolbox-3/PsychBasic/psychtoolbox.rules' '/etc/udev/rules.d/psychtoolbox.rules'
+udevadm control --reload ; udevadm trigger
+cp '/usr/share/psychtoolbox-3/PsychBasic/99-psychtoolboxlimits.conf' '/etc/security/limits.d/99-psychtoolboxlimits.conf'
+

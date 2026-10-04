@@ -1,0 +1,13 @@
+<action>
+	<icon>baobab</icon>
+	<name>Disk Usage</name>
+	<command>baobab %d</command>
+	<description>Viewing the disk usage of the current directory</description>
+	<patterns>*</patterns>
+	<directories/>
+	<audio-files/>
+	<image-files/>
+	<other-files/>
+	<text-files/>
+	<video-files/>
+</action>

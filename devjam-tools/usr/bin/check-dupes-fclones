@@ -1,0 +1,10 @@
+#!/bin/bash
+
+fclones --quiet group --hidden "${@}"
+
+printf "\n\n"
+echo "Press [ENTER] to terminate"
+read -s
+
+#echo "Press any key to terminate"
+#read -n 1 -s

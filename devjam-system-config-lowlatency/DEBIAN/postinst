@@ -1,0 +1,28 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+	configure)
+
+		# Apply sysctl settings if sysctl exists
+		if command -v sysctl >/dev/null 2>&1; then
+			sysctl --system || true
+		fi
+
+		# Reload systemd daemon
+		if command -v systemctl >/dev/null 2>&1; then
+			systemctl daemon-reload || true
+		fi
+
+		# Check if 'audio' groep exists
+        if getent group audio >/dev/null 2>&1; then
+            systemd-tmpfiles --create /usr/lib/tmpfiles.d/cpu-dma-latency.conf || true
+        else
+            echo "Warning: Group 'audio' not found on this system." >&2
+        fi
+		;;
+esac
+
+pam-auth-update --package
+
+exit 0

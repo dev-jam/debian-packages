@@ -1,0 +1,6 @@
+#!/bin/sh
+
+pipewire-start
+pipewire-enable
+pulse-disable
+

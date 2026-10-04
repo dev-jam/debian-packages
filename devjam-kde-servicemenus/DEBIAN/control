@@ -1,0 +1,8 @@
+Package: devjam-kde-servicemenus
+Version: 1.34-3
+Section: kde
+Priority: optional
+Architecture: all
+Recommends: meld, imagemagick, k4dirstat, kfind, kdialog, kompare, mediainfo, konsole, dolphin, krusader, thunar, pacpl, devjam-tools, fclones, inotify-tools, zstd, genisoimage, kio-admin, mkvtoolnix, ffmpeg, devjam-tools
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: KDE Service Menu items collection by devjam

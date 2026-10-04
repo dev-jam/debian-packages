@@ -1,0 +1,6 @@
+#!/bin/bash
+
+echo "Trimming all partitions"
+
+sudo fstrim -av
+sleep 4

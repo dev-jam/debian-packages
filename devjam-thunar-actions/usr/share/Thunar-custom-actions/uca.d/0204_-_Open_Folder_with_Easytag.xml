@@ -1,0 +1,8 @@
+<action>
+	<icon>dialog-warning</icon>
+	<name>Open Folder with Easytag</name>
+	<command>easytag %F</command>
+	<description>Open Folder with Easytag</description>
+	<patterns>*</patterns>
+	<directories/>
+</action>

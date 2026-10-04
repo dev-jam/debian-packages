@@ -1,0 +1,8 @@
+<action>
+	<icon>media-optical-video</icon>
+	<name>Convert video files to AVI lossy</name>
+	<command>vid-convert-codec --avi %N | zenity --text-info --title=&quot;Convert video files to AVI lossy&quot;</command>
+	<description>Convert video files to AVI lossy</description>
+	<patterns>*</patterns>
+	<video-files/>
+</action>

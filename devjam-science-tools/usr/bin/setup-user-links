@@ -1,0 +1,42 @@
+#!/bin/sh
+set -e
+
+# Define the target folder variable
+TARGET_DIR="Desktop/tools"
+
+# Ensure execution inside the user's home directory
+cd "$HOME"
+
+# Create the target directory
+mkdir -p "$TARGET_DIR"
+
+# Helper function: create symlink only if the target source exists
+make_link() {
+    src="$1"
+    target="$2"
+    if [ -e "$src" ]; then
+        ln -sf "$src" "$target"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# 1. Symlinks in $HOME
+# -----------------------------------------------------------------------------
+make_link /var/local/ram ram
+make_link /usr/local/share/cls-toolbox cls-toolbox
+
+# -----------------------------------------------------------------------------
+# 2. Symlinks directly in Desktop
+# -----------------------------------------------------------------------------
+make_link /usr/share/applications/print-system-information.desktop Desktop/print-system-information.desktop
+
+# -----------------------------------------------------------------------------
+# 3. Symlinks in $TARGET_DIR
+# -----------------------------------------------------------------------------
+make_link /usr/share/EyeLink "$TARGET_DIR/EyeLink"
+make_link /usr/local/share/cls-toolbox "$TARGET_DIR/cls-toolbox"
+make_link /usr/share/applications/pipewire-restart.desktop "$TARGET_DIR/pipewire-restart.desktop"
+make_link /usr/share/applications/switch2alsa.desktop "$TARGET_DIR/switch2alsa.desktop"
+make_link /usr/share/applications/switch2pipewire.desktop "$TARGET_DIR/switch2pipewire.desktop"
+
+exit 0

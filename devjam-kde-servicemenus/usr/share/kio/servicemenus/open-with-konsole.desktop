@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=40
+Icon=utilities-terminal
+MimeType=inode/directory;
+Actions=openWithKonsole
+X-KDE-AuthorizeAction=shell_access
+X-KDE-Priority=TopLevel
+
+[Desktop Action openWithKonsole]
+Name=Open Konsole Here
+Icon=utilities-terminal
+TryExec=konsole
+Exec=konsole --workdir %f

@@ -1,0 +1,9 @@
+Package: devjam-gpu-brave-config
+Version: 1.5-3
+Section: web
+Priority: optional
+Architecture: all
+Depends: brave-flags-wrapper
+Suggests: brave-origin | brave-browser
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: GPU Optimizations for brave-browser such as video decoding, compositing and rendering.

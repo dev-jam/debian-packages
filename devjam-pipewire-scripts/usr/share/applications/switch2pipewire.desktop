@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=Switch to Pipewire mode
+GenericName=Switch to Pipewire mode
+Comment=Disable Pulse and Enable Pipewire
+Exec=switch2pipewire
+Icon=audio-on
+StartupNotify=true
+Type=Application
+Categories=AudioVideo;

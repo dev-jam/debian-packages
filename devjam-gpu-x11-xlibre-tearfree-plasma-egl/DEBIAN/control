@@ -1,0 +1,8 @@
+Package: devjam-gpu-x11-xlibre-tearfree-plasma-egl
+Version: 1.4-3
+Section: x11
+Priority: optional
+Architecture: all
+Recommends: xlibre,devjam-gpu-x11-xlibre-tearfree-plasma
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Switch from glx to EGL for Kwin/Qt.

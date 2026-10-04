@@ -1,0 +1,8 @@
+Package: devjam-science-opensesame-psychopy
+Version: 1.5-4
+Section: science
+Priority: optional
+Architecture: all
+Depends: devjam-science-tools
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: OpenSesame Launcher with PsychoPy

@@ -1,0 +1,34 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=6
+Icon=klipper-symbolic
+MimeType=all/all;
+Actions=CopyQuotedOneLine;CopyQuotedMultiLine;CopyRaw;CopyNamesOnly;CopyNamesOnlyQuoted
+X-KDE-Priority=TopLevel
+X-KDE-StartupNotify=false
+X-KDE-Submenu=Copy to Clipboard
+
+[Desktop Action CopyQuotedOneLine]
+Name=CLI Copy Paths to Clipboard
+Icon=edit-copy
+Exec=copy-quoted-paths --one-line %F
+
+[Desktop Action CopyQuotedMultiLine]
+Name=GUI Copy Paths to Clipboard Quoted
+Icon=edit-copy
+Exec=copy-quoted-paths --multi-line %F
+
+[Desktop Action CopyRaw]
+Name=GUI Copy Paths to Clipboard
+Icon=edit-copy
+Exec=copy-quoted-paths --raw %F
+
+[Desktop Action CopyNamesOnly]
+Name=GUI Copy File/Directory Names to Clipboard
+Icon=edit-copy
+Exec=copy-quoted-paths --names-only %F
+
+[Desktop Action CopyNamesOnlyQuoted]
+Name=CLI Copy File/Directory Names to Clipboard
+Icon=edit-copy
+Exec=copy-quoted-paths --names-only-quoted %F

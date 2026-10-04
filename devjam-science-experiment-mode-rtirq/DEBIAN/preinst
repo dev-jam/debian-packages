@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+	install|upgrade)
+
+		# Backup original config only once
+		if [ ! -f /usr/share/devjam/rtirq/rtirq.conf ]; then
+			if [ -f /etc/rtirq.conf ] && [ ! -f /etc/rtirq.conf.org ]; then
+				mv /etc/rtirq.conf /etc/rtirq.conf.org 2>/dev/null || true
+			fi
+		fi
+		;;
+esac
+
+exit 0

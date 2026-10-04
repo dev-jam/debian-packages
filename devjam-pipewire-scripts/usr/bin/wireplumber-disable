@@ -1,0 +1,3 @@
+#!/bin/sh
+
+systemctl --user --now disable wireplumber.service

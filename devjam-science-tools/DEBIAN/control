@@ -1,0 +1,8 @@
+Package: devjam-science-tools
+Version: 1.75-3
+Section: science
+Priority: optional
+Architecture: all
+Depends: inxi, hardinfo2, fastfetch, udev, shared-mime-info, desktop-file-utils, hicolor-icon-theme
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: science tools

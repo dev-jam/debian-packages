@@ -1,0 +1,192 @@
+#!/bin/bash
+
+# Isolated-build replacement for the manual "dch ... && dpkg-buildpackage
+# -us -uc -b" workflow, for any package that has a debian/ folder -- not
+# specific to backports. Builds via sbuild's unshare backend instead of
+# directly on the host.
+#
+# Usage:
+#   cd path/to/package-with-debian-folder
+#   sbuild-local [--dist=SUITE] [--nocheck] [--allow-unstable=PKG[,PKG...]]
+#                [--extra-package-dir=DIR]
+#
+# Requires in ~/.sbuildrc (same as build-bpo):
+#   $chroot_mode = 'unshare';
+#   $clean_source = 0;
+#
+# NOTE on --allow-unstable: this pins unstable to -1 (never installable)
+# except for the named source package(s) (via src:name, which also covers
+# their binaries), pinned high. The preferences file is shipped to the
+# chroot as a base64 blob via --chroot-setup-commands and decoded there.
+# ("apt-get install -t unstable" was tried first and rejected: -t sets
+# the candidate preference for the whole transaction, not just the named
+# package, and pulled in a large chunk of unstable -- glibc, openssl,
+# python3 -- instead of just debhelper. A plain multi-line printf with
+# embedded \n was tried next and also broke: "Unable to parse package
+# file ... (1)" -- and a bare %s in a hook command turned out to be a
+# reserved sbuild percent-escape token, silently replaced with
+# "bash -i </dev/tty...". base64 output contains neither, so it survives
+# intact.)
+
+set -euo pipefail
+
+# Distribution to build against. Override with --dist=SUITE if the
+# package's changelog targets something other than trixie.
+DIST="trixie"
+
+# Off by default (a plain build should run the test suite, matching
+# dpkg-buildpackage). Turn on with --nocheck if the package's tests are
+# slow, flaky, or need things you don't want to bother wiring into the
+# chroot.
+NOCHECK=0
+
+# Comma-separated source package names (e.g. debhelper) to allow from
+# unstable, for when debian/control needs a build-tool version that only
+# exists there (e.g. debhelper-compat = 14 on trixie, which only ships
+# 13.x). Pinned via src:name, which covers every binary built from that
+# source. unstable itself is pinned to -1 (never installable) except for
+# these, pinned high -- so nothing else can leak in from it. This is safe
+# for actual *build tools* (debhelper, dh-sequence-*, etc.): they never
+# appear in the built .deb's own Depends:, unlike a library.
+ALLOW_UNSTABLE=""
+
+# Directory of extra .deb files to make available for build-dep
+# resolution, via sbuild's own --extra-package (one flag per .deb) --
+# e.g. a locally-built dependency you don't want to publish anywhere.
+EXTRA_PACKAGE_DIR=""
+
+command -v sbuild >/dev/null || { echo "Error: sbuild not installed" >&2; exit 1; }
+command -v base64 >/dev/null || { echo "Error: base64 not installed" >&2; exit 1; }
+command -v dpkg-parsechangelog >/dev/null || { echo "Error: dpkg-parsechangelog not installed" >&2; exit 1; }
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dist=*)
+            DIST="${1#*=}"
+            shift
+            ;;
+        --nocheck)
+            NOCHECK=1
+            shift
+            ;;
+        --allow-unstable=*)
+            ALLOW_UNSTABLE="${1#*=}"
+            shift
+            ;;
+        --extra-package-dir=*)
+            EXTRA_PACKAGE_DIR="${1#*=}"
+            shift
+            ;;
+        *)
+            echo "Error: Unknown option $1" >&2
+            echo "Usage: $0 [--dist=SUITE] [--nocheck] [--allow-unstable=PKG[,PKG...]] [--extra-package-dir=DIR]" >&2
+            exit 1
+            ;;
+    esac
+done
+
+[ -f debian/changelog ] || {
+    echo "Error: no debian/changelog here. Run this from the package's source directory." >&2
+    exit 1
+}
+
+src_dir="$PWD"
+# Match dpkg-buildpackage's own convention: output lands one directory
+# above the source tree, not inside it.
+build_dir="$(dirname "$src_dir")"
+nproc_count=$(nproc)
+
+# Quilt-format (3.0 (quilt), the common case) source trees need the
+# original upstream tarball sitting next to the source dir
+# (../<pkg>_<version>.orig.tar.*) -- dpkg-source refuses to build without
+# it. A source tree that only came from a git checkout (rather than
+# apt source, which fetches this automatically) usually lacks it. If
+# debian/watch exists, try uscan to fetch it before that failure happens.
+pkg_name=$(dpkg-parsechangelog -S Source)
+shopt -s nullglob
+orig_tarballs=(../"${pkg_name}"_*.orig.tar.*)
+shopt -u nullglob
+if [ "${#orig_tarballs[@]}" -eq 0 ] && [ -f debian/watch ]; then
+    if command -v uscan >/dev/null; then
+        echo "No upstream orig tarball next to the source tree -- trying uscan --download-current-version..."
+        uscan --download-current-version || echo "Warning: uscan didn't produce one; build may fail below." >&2
+    else
+        echo "Warning: no orig tarball and uscan isn't installed -- build will likely fail." >&2
+    fi
+fi
+
+sbuild_args=(-d "$DIST" -j"$nproc_count" --build-dir="$build_dir")
+[ "$NOCHECK" -eq 1 ] && sbuild_args+=(--profiles=nocheck)
+
+if [ -n "$EXTRA_PACKAGE_DIR" ]; then
+    shopt -s nullglob
+    extra_debs=("$EXTRA_PACKAGE_DIR"/*.deb)
+    shopt -u nullglob
+    if [ "${#extra_debs[@]}" -eq 0 ]; then
+        echo "Warning: no .deb files found in $EXTRA_PACKAGE_DIR" >&2
+    fi
+    for deb in "${extra_debs[@]}"; do
+        sbuild_args+=(--extra-package="$deb")
+    done
+fi
+
+if [ -n "$ALLOW_UNSTABLE" ]; then
+    pin_file="/etc/apt/preferences.d/99-unstable-allowlist"
+    # Pin by source package (src:name) rather than listing binaries --
+    # apt_preferences resolves this to every binary built from that
+    # source (e.g. src:debhelper covers both debhelper and
+    # libdebhelper-perl), so a version-locked sibling dependency like
+    # "debhelper Depends: libdebhelper-perl (= 14.5)" can't get stuck
+    # half-pinned because a sibling binary was left off the list.
+    src_pkglist=""
+    for pkg in ${ALLOW_UNSTABLE//,/ }; do
+        src_pkglist="${src_pkglist}src:${pkg} "
+    done
+    src_pkglist="${src_pkglist% }"
+
+    # Add the unstable source ourselves (chroot-setup-commands runs
+    # before sbuild wires up --extra-repository sources, so relying on
+    # that gave "unstable ... not available in the sources"). The
+    # trailing "&& echo ... && cat ..." isn't needed for the write
+    # itself -- it's there purely so the sbuild log's output for this
+    # hook shows the file it just wrote instead of just
+    # "I: Finished running '...'".
+    sbuild_args+=(--chroot-setup-commands="sh -c \"echo 'deb http://deb.debian.org/debian unstable main' > /etc/apt/sources.list.d/99-unstable.list && echo 'Added unstable apt source:' && echo && cat /etc/apt/sources.list.d/99-unstable.list && echo\"")
+
+    # Pin unstable to -1 (never installable) except for exactly the
+    # allow-listed packages, pinned high. NOT using "apt-get install
+    # -t unstable" here: -t sets the candidate preference for the
+    # whole transaction, not just the named package -- it pulled in a
+    # large chunk of unstable (glibc, openssl, python3...) rather than
+    # just debhelper.
+    #
+    # The preferences file is assembled here and shipped to the chroot
+    # as a single base64 blob, decoded on the other side -- that part
+    # has to stay a compact one-liner: an earlier attempt writing it
+    # as plain multi-line text (one --chroot-setup-commands per line,
+    # then a heredoc) either got mangled in transit or tripped
+    # sbuild's own percent-escape preprocessing, which treats a bare
+    # %s in a hook command as a hook token and silently replaces it
+    # with "bash -i </dev/tty...". base64 output never contains a
+    # literal "%", so it survives untouched.
+    # As above, the "&& echo ... && cat ..." tail is just so the
+    # actual preferences file shows up in the log's output section
+    # rather than the log showing only the base64 blob and "Finished
+    # running".
+    pin_content=$(printf '%s\n' \
+        "Package: *" "Pin: release a=unstable" "Pin-Priority: -1" "" \
+        "Package: ${src_pkglist}" "Pin: release a=unstable" "Pin-Priority: 990")
+    pin_content_b64=$(printf '%s' "$pin_content" | base64 -w0)
+
+    sbuild_args+=(--chroot-setup-commands="sh -c \"echo ${pin_content_b64} | base64 -d > ${pin_file} && echo 'Wrote unstable apt pin preferences:' && echo && cat ${pin_file} && echo\"")
+    sbuild_args+=(--chroot-setup-commands="apt-get update -qq")
+fi
+
+echo "Source:    $src_dir"
+echo "Dist:      $DIST"
+echo "Build-dir: $build_dir"
+[ "$NOCHECK" -eq 1 ] && echo "Nocheck:   on"
+[ -n "$ALLOW_UNSTABLE" ] && echo "From unstable (only): $ALLOW_UNSTABLE"
+[ -n "$EXTRA_PACKAGE_DIR" ] && echo "Extra packages from: $EXTRA_PACKAGE_DIR (${#extra_debs[@]} .deb found)"
+
+sbuild "${sbuild_args[@]}" .

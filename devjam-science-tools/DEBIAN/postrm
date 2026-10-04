@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove|purge)
+
+        # Reload udev rules and trigger events
+        if command -v udevadm >/dev/null 2>&1; then
+            udevadm control --reload || true
+            udevadm trigger || true
+        fi
+        ;;
+esac
+
+exit 0

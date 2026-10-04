@@ -1,0 +1,30 @@
+[Desktop Entry]
+Type=Service
+Icon=document-duplicate
+MimeType=inode/directory;
+Actions=CheckDupesFclones;CheckUniquesFclones;CheckDupesIsolateFclones;CheckUniquesIsolateFclones
+X-KDE-Submenu=Compare folders with fclones
+X-KDE-Priority=TopLevel
+X-KDE-AuthorizeAction=shell_access
+
+[Desktop Action CheckDupesFclones]
+Name=Check for duplicate files fclones
+Icon=document-duplicate
+Exec=konsole -e check-dupes-fclones %F
+
+[Desktop Action CheckUniquesFclones]
+Name=Check for unique files fclones
+Icon=document-duplicate
+Exec=konsole -e check-unique-fclones %F
+
+[Desktop Action CheckDupesIsolateFclones]
+Name=Compare multiple folders for duplicate files (in isolation) with fclones
+Icon=document-duplicate
+Exec=konsole -e check-dupes-isolate-fclones %F
+
+[Desktop Action CheckUniquesIsolateFclones]
+Name=Compare multiple folders for unique files (in isolation) with fclones
+Icon=document-duplicate
+Exec=konsole -e check-unique-isolate-fclones %F
+
+

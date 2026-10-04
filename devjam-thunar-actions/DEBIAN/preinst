@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    install|upgrade)
+
+        dpkg-divert --package devjam-thunar-actions --add --rename \
+            --divert /usr/bin/thunar.real /usr/bin/thunar
+        ;;
+esac
+
+exit 0

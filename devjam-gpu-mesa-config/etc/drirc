@@ -1,0 +1,19 @@
+<driconf>
+  <device>
+    <application name="Default">
+      <option name="mesa_glthread" value="true" />
+      <option name="force_glsl_extensions_warn" value="false" />
+      <option name="mesa_no_error" value="true" />
+      <option name="mesa_glthread_app_profile" value="1" />
+      <option name="mesa_glthread_driver" value="true" />
+    </application>
+    <application name="glxgears" executable="glxgears">
+     <option name="mesa_glthread" value="true" />
+      <option name="force_glsl_extensions_warn" value="false" />
+      <option name="mesa_no_error" value="true" />
+      <option name="vblank_mode" value="0"      />
+      <option name="mesa_glthread_app_profile" value="1" />
+      <option name="mesa_glthread_driver" value="true" />
+    </application>  
+  </device>
+</driconf>

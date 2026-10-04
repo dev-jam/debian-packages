@@ -1,0 +1,8 @@
+Package: devjam-mpv-config
+Version: 1.1-3
+Section: video
+Priority: optional
+Architecture: all
+Recommends: mpv
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: mpv configs for the CLS lab monitors

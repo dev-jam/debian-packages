@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=APT System Cleaner
+Comment=Purge unused packages and clean APT cache
+Exec=/usr/bin/system-clean-apt
+Icon=utilities-terminal
+Terminal=true
+Categories=System;Settings;

@@ -1,0 +1,13 @@
+<action>
+	<icon>emblem-symbolic-link</icon>
+	<name>Create symlink</name>
+	<command>ln -s %f Link_to_%n</command>
+	<description>makes a link to a folder or file</description>
+	<patterns>*</patterns>
+	<directories/>
+	<audio-files/>
+	<image-files/>
+	<other-files/>
+	<text-files/>
+	<video-files/>
+</action>

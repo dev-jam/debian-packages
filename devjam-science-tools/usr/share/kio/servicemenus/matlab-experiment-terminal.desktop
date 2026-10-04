@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=4
+Icon=matlab
+MimeType=text/x-matlab
+Actions=MatlabExperiment
+X-KDE-Priority=TopLevel
+
+[Desktop Action MatlabExperiment]
+Name=Run Matlab Experiment with Psychtoolbox
+Icon=matlab
+Exec=konsole -e matlab-run-cli-exp %f

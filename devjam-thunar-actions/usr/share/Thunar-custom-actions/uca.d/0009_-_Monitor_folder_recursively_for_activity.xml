@@ -1,0 +1,9 @@
+<action>
+	<icon>question</icon>
+	<name>Monitor folder recursively for activity</name>
+	<unique-id>1599331121845122-1</unique-id>
+	<command>xfce4-terminal --hide-menubar --hide-toolbar --hide-scrollbar --geometry=80x40 -x inotifywait -m -r %f</command>
+	<description>Monitor folder recursively for activity</description>
+	<patterns>*</patterns>
+	<directories/>
+</action>

@@ -1,0 +1,6 @@
+# profile-name: BenQ PD2700U
+
+Section "Monitor"
+	Identifier		"DP-1"
+	DisplaySize		597 337    # In millimeters
+EndSection

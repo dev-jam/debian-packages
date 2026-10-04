@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# Version 1.2 - Clean systemd-nspawn wrapper for live-build & system rescue
+
+set -euo pipefail
+
+# Print usage instructions
+usage() {
+    local exit_code="${1:-0}"
+    cat <<EOF
+Usage: $0 [--rescue|--debug|--sandbox|--boot] [--yes] [path_to_target]
+
+Options:
+  --debug    (Default) Hardware-isolated environment with host networking, for build debugging.
+  --rescue   Full host hardware (/dev) & EFI access, with host networking, for repairing installed
+             systems/GRUB. Runs without user namespacing (container root == host root) and requires
+             interactive confirmation unless --yes is given.
+  --sandbox  Completely isolated environment with network disabled.
+  --boot     Boot the target environment as a full container (systemd init), with host networking.
+  --yes      Skip the interactive rescue-mode confirmation (for scripted/non-interactive use).
+  -h, --help Show this help message.
+
+Only one target directory may be given. The default target is ./chroot.
+EOF
+    exit "$exit_code"
+}
+
+MODE="debug"
+TARGET=""
+ASSUME_YES=0
+
+# Parse command line flags. -h/--help is handled here, before the root check
+# below, so it works without sudo - same convention most CLI tools follow.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --rescue) MODE="rescue"; shift ;;
+        --debug) MODE="debug"; shift ;;
+        --sandbox) MODE="sandbox"; shift ;;
+        --boot) MODE="boot"; shift ;;
+        --yes) ASSUME_YES=1; shift ;;
+        -h|--help) usage ;;
+        --)
+            shift
+            while [[ $# -gt 0 ]]; do
+                if [ -n "$TARGET" ]; then
+                    echo "Error: Unexpected extra argument '$1' (target already set to '$TARGET')" >&2
+                    usage 2
+                fi
+                TARGET="$1"
+                shift
+            done
+            ;;
+        -*)
+            echo "Error: Unknown option '$1'" >&2
+            usage 2
+            ;;
+        *)
+            if [ -n "$TARGET" ]; then
+                echo "Error: Unexpected extra argument '$1' (target already set to '$TARGET')" >&2
+                usage 2
+            fi
+            TARGET="$1"
+            shift
+            ;;
+    esac
+done
+
+# Require root privileges (checked as early as possible once we know this
+# isn't just a --help call, and before touching the filesystem)
+if [ "$EUID" -ne 0 ]; then
+    echo -e "\033[0;31m[ERROR]\033[0m This script must be run as root or with sudo." >&2
+    exit 1
+fi
+
+# Verify systemd-nspawn is available before validating anything user-supplied
+if ! command -v systemd-nspawn &>/dev/null; then
+    echo -e "\033[0;31m[ERROR]\033[0m systemd-nspawn is not installed. Install it via: apt install systemd-container" >&2
+    exit 1
+fi
+
+# Verify target directory exists, then canonicalize it
+TARGET="${TARGET:-chroot}"
+if [ ! -d "${TARGET}" ]; then
+    echo -e "\033[0;31m[ERROR]\033[0m Target directory '${TARGET}' does not exist." >&2
+    exit 1
+fi
+TARGET="$(realpath -e -- "${TARGET}")"
+
+# /etc/resolv.conf is bound read-only into every mode below for working DNS
+# resolution, but --bind requires its source to exist or systemd-nspawn
+# refuses to start the container at all (same failure mode as the EFI-vars
+# case in rescue mode). Build that bind conditionally so a host without a
+# regular /etc/resolv.conf doesn't just hard-fail on every invocation.
+resolv_bind=()
+if [ -e /etc/resolv.conf ]; then
+    resolv_bind=(--bind-ro=/etc/resolv.conf)
+else
+    echo -e "\033[0;33m[WARN]\033[0m /etc/resolv.conf not found; continuing without it (DNS may not work in the container)." >&2
+fi
+
+case "$MODE" in
+    rescue)
+        # Rescue mode gives the container direct, recursive access to the
+        # host's real /dev, and deliberately runs without user namespacing
+        # (--private-users=no, made explicit below rather than left as an
+        # implicit default): container root is the host's root. A mistake
+        # run inside can affect this host, not just "${TARGET}".
+        if [ "$ASSUME_YES" -ne 1 ]; then
+            if [ ! -t 0 ] || [ ! -t 1 ]; then
+                echo -e "\033[0;31m[ERROR]\033[0m Rescue mode requires an interactive terminal; use --yes to explicitly bypass confirmation." >&2
+                exit 2
+            fi
+
+            echo -e "\033[1;33m[WARNING]\033[0m Rescue mode gives this container direct access to the host's real /dev, with no user-namespace isolation (container root == host root)."
+            read -r -p "Continue into rescue mode for '${TARGET}'? [y/N] " confirm
+            if [[ ! "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                echo "Aborted." >&2
+                exit 1
+            fi
+        fi
+
+        # EFI variables only exist on UEFI systems; see the /etc/resolv.conf
+        # comment above for why this needs the same conditional treatment.
+        efi_bind=()
+        if [ -d /sys/firmware/efi/efivars ]; then
+            efi_bind=(--bind=/sys/firmware/efi/efivars)
+        else
+            echo -e "\033[0;33m[WARN]\033[0m /sys/firmware/efi/efivars not found (BIOS/legacy system?); continuing without EFI variable access." >&2
+        fi
+
+        echo "==> [RESCUE MODE] Entering ${TARGET} with full hardware access..."
+        exec systemd-nspawn \
+            -D "${TARGET}" \
+            --as-pid2 \
+            --bind=/dev \
+            --private-users=no \
+            "${efi_bind[@]}" \
+            "${resolv_bind[@]}"
+        ;;
+    debug)
+        if [ ! -f "${TARGET}/bin/bash" ] && [ ! -f "${TARGET}/bin/sh" ]; then
+            echo -e "\033[0;31m[ERROR]\033[0m Target '${TARGET}' is missing /bin/bash or /bin/sh. Has 'lb bootstrap' executed?" >&2
+            exit 1
+        fi
+        echo "==> [BUILD DEBUG MODE] Entering ${TARGET} (Hardware isolated, network enabled)..."
+        exec systemd-nspawn \
+            -D "${TARGET}" \
+            --as-pid2 \
+            "${resolv_bind[@]}"
+        ;;
+    sandbox)
+        echo "==> [SANDBOX MODE] Entering ${TARGET} (Network disabled, strictly isolated)..."
+        exec systemd-nspawn \
+            -D "${TARGET}" \
+            --as-pid2 \
+            --private-network
+        ;;
+    boot)
+        echo "==> [FULL BOOT MODE] Booting ${TARGET} systemd container..."
+        exec systemd-nspawn \
+            -b \
+            -D "${TARGET}" \
+            "${resolv_bind[@]}"
+        ;;
+esac

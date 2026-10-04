@@ -1,0 +1,4 @@
+#!/bin/bash
+
+watch -n 0.5 "ps -Leo pid,psr,rtprio,cls,comm | grep RR"
+

@@ -1,0 +1,6 @@
+#!/bin/sh
+
+pulse-stop
+
+systemctl --user start pipewire.service && systemctl --user start pipewire.socket
+systemctl --user start pipewire-pulse.service && systemctl --user start pipewire-pulse.socket

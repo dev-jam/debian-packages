@@ -1,0 +1,9 @@
+<action>
+	<icon>matlab.png</icon>
+	<name>Run Matlab Experiment</name>
+	<command>xfce4-terminal -x matlab-run-cli-exp %f</command>
+	<description>Run Matlab Experiment</description>
+	<patterns>*.m</patterns>
+	<other-files/>
+	<text-files/>
+</action>

@@ -1,0 +1,8 @@
+<action>
+	<icon>xfce4-clipman-plugin</icon>
+	<name>Copies the contents of the selected file to the clipboard.</name>
+	<command>cat &quot;%F&quot; | xclip -i -selection clipboard</command>
+	<description>Copies the contents of the selected file to the clipboard.</description>
+	<patterns>*</patterns>
+	<text-files/>
+</action>

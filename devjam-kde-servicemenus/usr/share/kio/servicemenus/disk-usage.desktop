@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Service
+InitialPreference=32
+Icon=k4dirstat
+MimeType=inode/directory;
+Actions=DiskUsage
+X-KDE-Priority=TopLevel
+
+[Desktop Action DiskUsage]
+Name=Disk Usage
+Icon=k4dirstat
+Exec=k4dirstat %u

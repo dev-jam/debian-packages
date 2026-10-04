@@ -1,0 +1,63 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+	remove)
+
+		if command -v systemctl >/dev/null 2>&1; then
+
+			# Reload systemd daemon
+			systemctl daemon-reload || true
+
+			# Start/restart rtirq only if enabled
+			if systemctl is-enabled --quiet rtirq.service; then
+				if systemctl is-active --quiet rtirq.service; then
+					systemctl restart rtirq.service || true
+				else
+					systemctl start rtirq.service || true
+				fi
+			fi
+
+			# Restart irqbalance only if it is currently active
+			if systemctl is-active --quiet irqbalance.service; then
+				systemctl restart irqbalance.service || true
+			fi
+		fi
+
+		# Update grub without experiment mode
+		if command -v update-grub >/dev/null 2>&1; then
+			update-grub 2>/dev/null || true
+		fi
+		;;
+	purge)
+
+		# Restore original config only on full purge
+		if [ -f /etc/rtirq.conf.org ]; then
+			echo "Restoring original /etc/rtirq.conf from backup"
+			mv -f /etc/rtirq.conf.org /etc/rtirq.conf 2>/dev/null || true
+		fi
+
+		if command -v systemctl >/dev/null 2>&1; then
+
+			# Reload systemd daemon
+			systemctl daemon-reload || true
+
+			# Start/restart rtirq only if enabled
+			if systemctl is-enabled --quiet rtirq.service; then
+				if systemctl is-active --quiet rtirq.service; then
+					systemctl restart rtirq.service || true
+				else
+					systemctl start rtirq.service || true
+				fi
+			fi
+		fi
+		
+		# Reload udev rules and trigger events
+		if command -v udevadm >/dev/null 2>&1; then
+			udevadm control --reload || true
+			udevadm trigger || true
+		fi
+		;;
+esac
+
+exit 0

@@ -1,0 +1,83 @@
+#!/bin/sh
+# copy-quoted-paths -- copy selected file paths to clipboard
+# Usage:
+#   copy-quoted-paths --one-line
+#   copy-quoted-paths --multi-line
+#   copy-quoted-paths --raw
+#   copy-quoted-paths --names-only
+#   copy-quoted-paths --names-only-quoted
+
+MODE="--one-line"
+case "$1" in
+  --one-line|--multi-line|--raw|--names-only|--names-only-quoted)
+    MODE="$1"
+    shift
+    ;;
+esac
+
+if [ $# -eq 0 ]; then
+  notify-send "copy-quoted-paths" "No files provided"
+  exit 1
+fi
+
+TMP=$(mktemp) || exit 1
+trap 'rm -f "$TMP"' EXIT
+
+escape_single_quotes() {
+  printf "%s" "$1" | sed "s/'/'\\\\''/g"
+}
+
+last=$(( $# - 1 ))
+i=0
+
+if [ "$MODE" = "--raw" ]; then
+  for f in "$@"; do
+    printf "%s" "$f" >> "$TMP"
+    [ $i -lt $last ] && printf "\n" >> "$TMP"
+    i=$((i + 1))
+  done
+elif [ "$MODE" = "--multi-line" ]; then
+  for f in "$@"; do
+    esc=$(escape_single_quotes "$f")
+    printf "'%s'" "$esc" >> "$TMP"
+    [ $i -lt $last ] && printf "\n" >> "$TMP"
+    i=$((i + 1))
+  done
+elif [ "$MODE" = "--names-only" ]; then
+  for f in "$@"; do
+    printf "%s" "$(basename "$f")" >> "$TMP"
+    [ $i -lt $last ] && printf "\n" >> "$TMP"
+    i=$((i + 1))
+  done
+elif [ "$MODE" = "--names-only-quoted" ]; then
+  for f in "$@"; do
+    esc=$(escape_single_quotes "$(basename "$f")")
+    printf "'%s'" "$esc" >> "$TMP"
+    [ $i -lt $last ] && printf "\n" >> "$TMP"
+    i=$((i + 1))
+  done
+else
+  # --one-line (space separated, quoted)
+  for f in "$@"; do
+    esc=$(escape_single_quotes "$f")
+    printf "'%s'" "$esc" >> "$TMP"
+    [ $i -lt $last ] && printf " " >> "$TMP"
+    i=$((i + 1))
+  done
+fi
+
+# Clipboard handling
+if command -v wl-copy >/dev/null 2>&1; then
+  wl-copy < "$TMP"
+  exit $?
+elif command -v xclip >/dev/null 2>&1; then
+  xclip -i -selection clipboard < "$TMP"
+  exit $?
+elif command -v xsel >/dev/null 2>&1; then
+  xsel --clipboard --input < "$TMP"
+  exit $?
+else
+  notify-send "Clipboard error" "No clipboard tool found (install wl-clipboard or xclip/xsel)"
+  cat "$TMP" >&2
+  exit 2
+fi
