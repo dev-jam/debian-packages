@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Fclones
+Exec=fclones-gui %U
+Icon=fclones-gui.png
+Comment=Finds and removes duplicate files
+Categories=Utility
