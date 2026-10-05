@@ -17,7 +17,7 @@ for dir in "$@"; do
         dist_dir="$parent_dir/dist"
 
         mkdir -p "$dist_dir"
-        dpkg-deb --root-owner-group -Zzstd --build "$dir_path" "$dist_dir"
+        dpkg-deb --root-owner-group --build "$dir_path" "$dist_dir"
         built_count=$((built_count + 1))
     fi
 done
