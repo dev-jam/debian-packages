@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: devjam-archive-keyring
-Source: https://github.com/dev-jam/debian-sources/tree/main/devjam-archive-keyring
+Upstream-Name: devjam-external-keyring
+Source: https://github.com/dev-jam/debian-sources/tree/main/devjam-external-keyring
 
 Files: *
 Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>
