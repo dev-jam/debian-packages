@@ -1,10 +1,10 @@
-# debian-sources
+# debian-packages
 
 Monorepo with the package trees for the custom Debian packages.
 
 Each top-level directory is one binary package: the payload files (laid out as they are installed on the target system) plus a `DEBIAN/` directory with the control metadata. Packages are built with `dpkg-deb`, not with `debuild`/`dpkg-buildpackage`.
 
-Built packages are published in the apt repository [`dev-jam/debian_repo`](https://github.com/dev-jam/debian_repo).
+Built packages are published in the apt repository [`dev-jam/debian-repo`](https://github.com/dev-jam/debian-repo).
 
 ---
 
