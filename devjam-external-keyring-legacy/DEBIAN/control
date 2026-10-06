@@ -1,0 +1,7 @@
+Package: devjam-external-keyring-legacy
+Version: 1.0-1
+Section: misc
+Priority: optional
+Architecture: all
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: external repo keys for Debian (legacy)
