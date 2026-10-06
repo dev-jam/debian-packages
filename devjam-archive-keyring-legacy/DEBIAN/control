@@ -1,7 +1,7 @@
 Package: devjam-archive-keyring-legacy
-Version: 1.41-3
+Version: 1.42-1
 Section: misc
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: custom keyring for Debian
+Description: Signing key for the dev-jam apt repository (legacy)
