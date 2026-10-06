@@ -16,12 +16,14 @@ Built packages are published in the apt repository [`dev-jam/debian-repo`](https
 | --- | --- |
 | `devjam-archive-keyring` | Signing key for the dev-jam apt repository |
 | `devjam-archive-keyring-legacy` | Legacy variant of the keyring package |
+| `devjam-external-keyring` | Signing keys for the external apt repositories |
+| `devjam-external-keyring-legacy` | Legacy variant of the external keyring package |
 
 ### Tools & utilities
 
 | Package | Purpose |
 | --- | --- |
-| `devjam-tools` | General scripts and utilities (`mkvdts2ac3.sh`, `alsa-capabilities`, `smt-manager.pl`, ...) |
+| `devjam-tools` | General scripts and utilities |
 | `apt-cleaner` | APT cleanup helper |
 | `fclones-gui-launcher` | Launcher for the fclones GUI |
 | `devjam-pipewire-scripts` | PipeWire helper scripts |
@@ -33,7 +35,7 @@ Built packages are published in the apt repository [`dev-jam/debian-repo`](https
 | `devjam-system-config` | System-level configuration and systemd tweaks |
 | `devjam-system-config-lowlatency` | Low-latency system configuration |
 | `devjam-desktop-kernel-hardening` | Kernel hardening settings for desktops |
-| `devjam-cpu-powercap` | CPU power capping |
+| `devjam-cpu-powercap` | CPU power cap permission for reading power usage |
 | `devjam-sensors-asus-z790-plus-wifi` | Sensor configuration for the ASUS Z790-PLUS WIFI board |
 | `devjam-live-boot-hooks` | Hooks for live-boot systems |
 | `devjam-conky-system-monitor` | Conky system monitor setup |
