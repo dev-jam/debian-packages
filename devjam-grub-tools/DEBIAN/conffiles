@@ -1,0 +1,9 @@
+/etc/grub.d/50_rescuezilla
+/etc/grub.d/51_clonezilla
+/etc/grub.d/52_rescatux
+/etc/grub.d/54_hwinfo
+/etc/grub.d/55_supergrub2disk
+/etc/grub.d/56_memtest86
+/etc/grub.d/60_boot-local-isos
+/etc/grub.d/61_boot-global-isos
+/etc/grub.d/90_shutdown-reboot

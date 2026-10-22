@@ -1,5 +1,5 @@
 Package: devjam-sensors-asus-z790-plus-wifi
-Version: 1.0-3
+Version: 1.0-4
 Section: utils
 Priority: optional
 Architecture: all

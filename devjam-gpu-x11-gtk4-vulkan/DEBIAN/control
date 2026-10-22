@@ -1,5 +1,5 @@
 Package: devjam-gpu-x11-gtk4-vulkan
-Version: 1.0-3
+Version: 1.0-4
 Section: x11
 Priority: optional
 Architecture: all
