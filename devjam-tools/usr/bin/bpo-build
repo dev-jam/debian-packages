@@ -52,7 +52,12 @@ command -v sbuild >/dev/null || { echo "Error: sbuild not installed" >&2; exit 1
 command -v dpkg-parsechangelog >/dev/null || { echo "Error: dpkg-parsechangelog not installed" >&2; exit 1; }
 command -v base64 >/dev/null || { echo "Error: base64 not installed" >&2; exit 1; }
 
-# Parse optional suite flags
+# Parse optional suite flags. Flags and package names can be mixed in any
+# order (e.g. "bpo-build digikam --pause" works exactly like
+# "bpo-build --pause digikam") -- packages are collected into an array
+# instead of stopping flag-parsing at the first non-flag argument, which
+# used to silently swallow a later flag as if it were a package name.
+packages=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --stable)
@@ -97,6 +102,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --)
             shift
+            packages+=("$@")
             break
             ;;
         -*)
@@ -105,13 +111,14 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            break
+            packages+=("$1")
+            shift
             ;;
     esac
 done
 
 # Check if at least one package argument is provided
-[ $# -eq 0 ] && { echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] <package1> [<package2> ...]" >&2; exit 1; }
+[ "${#packages[@]}" -eq 0 ] && { echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] <package1> [<package2> ...]" >&2; exit 1; }
 
 # Tool check specific to the chosen fetch method
 case "$FETCH_METHOD" in
@@ -125,17 +132,18 @@ esac
 
 home_dir="$HOME/build/bpo/$(date +%Y-%m-%d_%H.%M.%S)"
 mkdir -p "$home_dir" && cd "$home_dir"
+
 echo "Target suite: $SUITE"
 echo "Fetch method: $FETCH_METHOD"
 [ -n "$REVISION" ] && echo "Backport revision: ~bpoXX+$REVISION"
 [ "$PAUSE" -eq 1 ] && echo "Pause before build: on"
 [ -n "$ALLOW_UNSTABLE" ] && echo "From unstable (only): $ALLOW_UNSTABLE"
-echo "Creating deb packages for: $*"
+echo "Creating deb packages for: ${packages[*]}"
 
 success_count=0
 error_count=0
 
-for package in "$@"; do
+for package in "${packages[@]}"; do
     echo "Processing '$package' from suite '$SUITE'..."
     mkdir -p "$package" && cd "$package"
 
@@ -293,7 +301,7 @@ for package in "$@"; do
         rm -f ../.bpo-allow-unstable
     fi
 
-    if sbuild "${sbuild_args[@]}" . 2>/dev/null; then
+    if sbuild "${sbuild_args[@]}" .; then
         echo "✅ Success: Created deb package for '$package'"
         success_count=$((success_count + 1))
     else
