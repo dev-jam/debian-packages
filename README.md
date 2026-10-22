@@ -26,7 +26,7 @@ Built packages are published in the apt repository [`dev-jam/debian-repo`](https
 | `devjam-tools` | General scripts and utilities |
 | `apt-cleaner` | APT cleanup helper |
 | `fclones-gui-launcher` | Launcher for the fclones GUI |
-| `devjam-pipewire-scripts` | PipeWire helper scripts |
+| `devjam-pipewire-scripts` | Switch between PipeWire and ALSA-only mode |
 
 ### System configuration
 
@@ -57,6 +57,7 @@ Built packages are published in the apt repository [`dev-jam/debian-repo`](https
 | `devjam-gpu-chromium-config` | GPU-related settings for Chromium |
 | `devjam-gpu-x11-gtk4-vulkan` | X11 / GTK4 / Vulkan settings |
 | `devjam-gpu-x11-synaptics-config` | X11 Synaptics touchpad configuration |
+| `devjam-gpu-x11-xlibre-dmabuf` | DMA-BUF support for the XLibre server |
 | `devjam-gpu-x11-xlibre-tearfree-amdgpu` | XLibre TearFree configuration (amdgpu) |
 | `devjam-gpu-x11-xlibre-tearfree-modesetting` | XLibre TearFree configuration (modesetting) |
 | `devjam-gpu-x11-xlibre-tearfree-plasma` | XLibre TearFree configuration (Plasma) |
