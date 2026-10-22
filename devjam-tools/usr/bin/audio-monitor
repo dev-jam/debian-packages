@@ -1,6 +1,11 @@
 #!/bin/bash
 
-# Usage: audio-monitor [-c|--card <num|all>] [-r|--refresh <seconds>]
+# Usage: audio-monitor [-c|--card <num|all>] [-r|--refresh <seconds>] [-v|--verbose]
+#
+# Shows every open ALSA PCM substream with its hardware parameters
+# (format, channels, rate, period and buffer size), the period/buffer
+# duration in ms, and the runtime status (state, owning process, delay).
+# With -v, sw_params and the raw pointer/avail values are shown as well.
 #
 # This script wraps itself in `watch` on first invocation.
 # The AUDIOMON_WATCHED env var prevents infinite re-wrapping: once set,
@@ -8,17 +13,30 @@
 
 CARD_ARG="all"
 REFRESH="1"
+VERBOSE=0
 
+usage() {
+    echo "Usage: $0 [-c|--card <num|all>] [-r|--refresh <seconds>] [-v|--verbose]" >&2
+    exit 1
+}
+
+# Translate long options into their short equivalents for getopts.
 ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
         --card)
+            [ $# -ge 2 ] || usage
             ARGS+=("-c" "$2")
             shift 2
             ;;
         --refresh)
+            [ $# -ge 2 ] || usage
             ARGS+=("-r" "$2")
             shift 2
+            ;;
+        --verbose)
+            ARGS+=("-v")
+            shift
             ;;
         *)
             ARGS+=("$1")
@@ -28,24 +46,72 @@ while [ $# -gt 0 ]; do
 done
 set -- "${ARGS[@]}"
 
-while getopts "c:r:" opt; do
+while getopts "c:r:v" opt; do
     case "$opt" in
         c) CARD_ARG="$OPTARG" ;;
         r) REFRESH="$OPTARG" ;;
-        *)
-            echo "Usage: $0 [-c|--card <num|all>] [-r|--refresh <seconds>]" >&2
-            exit 1
-            ;;
+        v) VERBOSE=1 ;;
+        *) usage ;;
     esac
 done
 
 if [ -z "$AUDIOMON_WATCHED" ]; then
     export AUDIOMON_WATCHED=1
+    WATCH_ARGS=(-c "$CARD_ARG" -r "$REFRESH")
+    [ "$VERBOSE" -eq 1 ] && WATCH_ARGS+=(-v)
     # -t suppresses watch's own header/title entirely; we print our own below.
-    exec watch -t -n "$REFRESH" "$0" -c "$CARD_ARG" -r "$REFRESH"
+    exec watch -t -n "$REFRESH" "$0" "${WATCH_ARGS[@]}"
 fi
 
-# Our own clean header, printed once per refresh cycle.
+# --- helpers -----------------------------------------------------------------
+
+# Read a "key: value" proc file into the associative array named by $2.
+# Whitespace around keys and leading whitespace of values is stripped
+# (the status file pads keys, e.g. "hw_ptr      : 12345").
+read_proc_kv() {
+    local file="$1"
+    local -n out="$2"
+    local key val
+    out=()
+    [ -r "$file" ] || return 1
+    while IFS=':' read -r key val; do
+        key="${key//[[:space:]]/}"
+        [ -n "$key" ] || continue
+        val="${val#"${val%%[![:space:]]*}"}"
+        out["$key"]="$val"
+    done < "$file"
+}
+
+is_uint() {
+    [[ "$1" =~ ^[0-9]+$ ]]
+}
+
+# frames_to_ms <frames> <rate>  ->  "21.33 ms" or empty if not computable
+frames_to_ms() {
+    if is_uint "$1" && is_uint "$2" && [ "$2" -gt 0 ]; then
+        awk -v f="$1" -v r="$2" 'BEGIN { printf "%.2f ms", f / r * 1000 }'
+    fi
+}
+
+# Print "label: value" aligned; skip lines whose value is empty.
+row() {
+    [ -n "$2" ] && printf '  %-14s %s\n' "$1:" "$2"
+}
+
+# Print frames plus the equivalent duration, e.g. "1024 frames (21.33 ms)".
+row_frames() {
+    local label="$1" frames="$2" rate="$3" extra="$4" ms
+    [ -n "$frames" ] || return 0
+    ms=$(frames_to_ms "$frames" "$rate")
+    if [ -n "$ms" ]; then
+        row "$label" "${frames} frames (${ms})${extra}"
+    else
+        row "$label" "${frames}${extra}"
+    fi
+}
+
+# --- main pass ---------------------------------------------------------------
+
 echo "Audio Monitor — card: ${CARD_ARG}, refresh: ${REFRESH}s — $(date '+%H:%M:%S')"
 echo
 
@@ -65,19 +131,78 @@ while read -r line; do
     fi
 done < /proc/asound/cards
 
+declare -A HW ST SW
+found=0
+
 for hw in /proc/asound/${CARD_GLOB}/pcm*/sub*/hw_params; do
     [ -e "$hw" ] || continue
+
+    first_line=$(head -n1 "$hw" 2>/dev/null)
+    [ -n "$first_line" ] && [ "$first_line" != "closed" ] || continue
+
+    sub_dir="${hw%/hw_params}"       # /proc/asound/card1/pcm0p/sub0
+    pcm_dir="${sub_dir%/*}"          # /proc/asound/card1/pcm0p
+    pcm_name="${pcm_dir##*/}"        # pcm0p
+    sub_name="${sub_dir##*/}"        # sub0
 
     card_dir="${hw#/proc/asound/card}"
     card_num="${card_dir%%/*}"
     name="${CARD_NAMES[$card_num]:-unknown}"
 
-    state=$(cat "$hw" 2>/dev/null)
-    first_line=$(echo "$state" | head -n1)
+    dev_num="${pcm_name#pcm}"
+    dev_num="${dev_num%[pc]}"
+    case "$pcm_name" in
+        *p) direction="playback" ;;
+        *c) direction="capture" ;;
+        *)  direction="unknown" ;;
+    esac
 
-    if [ "$first_line" != "closed" ]; then
-        echo "== card ${card_num}, ${name} =="
-        echo "$state" | grep -E '^(rate|format|channels):'
-        echo
+    read_proc_kv "$hw" HW
+    read_proc_kv "$sub_dir/status" ST
+    read_proc_kv "$sub_dir/sw_params" SW
+
+    rate="${HW[rate]%% *}"           # "48000 (48000/1)" -> "48000"
+    period="${HW[period_size]}"
+    buffer="${HW[buffer_size]}"
+
+    periods=""
+    if is_uint "$period" && is_uint "$buffer" && [ "$period" -gt 0 ]; then
+        periods=", $((buffer / period)) periods"
     fi
+
+    owner=""
+    pid="${ST[owner_pid]}"
+    if is_uint "$pid" && [ "$pid" -gt 0 ]; then
+        comm=$(cat "/proc/$pid/comm" 2>/dev/null)
+        owner="${comm:-?} (pid ${pid})"
+    fi
+
+    found=1
+    echo "== card ${card_num}, ${name} — hw:${card_num},${dev_num} ${direction} (${sub_name}) =="
+    row        "state"     "${ST[state]}"
+    row        "owner"     "$owner"
+    row        "access"    "${HW[access]}"
+    row        "format"    "${HW[format]}"
+    row        "channels"  "${HW[channels]}"
+    row        "rate"      "${rate:+${rate} Hz}"
+    row_frames "period"    "$period" "$rate"
+    row_frames "buffer"    "$buffer" "$rate" "$periods"
+    row_frames "delay"     "${ST[delay]}" "$rate"
+    row_frames "avail"     "${ST[avail]}" "$rate"
+
+    if [ "$VERBOSE" -eq 1 ]; then
+        row_frames "avail_max"  "${ST[avail_max]}" "$rate"
+        row        "hw_ptr"     "${ST[hw_ptr]}"
+        row        "appl_ptr"   "${ST[appl_ptr]}"
+        row        "tstamp_mode" "${SW[tstamp_mode]}"
+        row_frames "avail_min"  "${SW[avail_min]}" "$rate"
+        row_frames "start_thr"  "${SW[start_threshold]}" "$rate"
+        row        "stop_thr"   "${SW[stop_threshold]}"
+        row        "silence_thr" "${SW[silence_threshold]}"
+        row        "silence_sz" "${SW[silence_size]}"
+        row        "boundary"   "${SW[boundary]}"
+    fi
+    echo
 done
+
+[ "$found" -eq 1 ] || echo "No open PCM substreams."
