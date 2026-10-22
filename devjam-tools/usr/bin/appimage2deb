@@ -1,0 +1,293 @@
+#!/bin/sh
+# Repackage any (type 2) AppImage as a .deb.
+#
+# The AppImage is extracted to /opt/<package> (no FUSE needed at run time) and
+# made available as /usr/bin/<command>, with its own desktop entry and icons.
+# Names, version and architecture are taken from the AppImage itself.
+#
+# Usage: appimage2deb.sh [options] Some-App-1.2.3-x86_64.AppImage
+#   -n NAME      package name                 (default: <name>-appimage)
+#   -c COMMAND   command in /usr/bin           (default: <name>, or <name>-appimage
+#                                               if /usr/bin/<name> belongs to another package)
+#   -v VERSION   upstream version, or full Debian version with "-revision"
+#                                              (default: X-AppImage-Version or file name)
+#   -R REVISION  Debian revision               (default: 1), e.g. 2 for a rebuild of the same version
+#   -N TITLE     menu title (Name=)            (default: as in the AppImage)
+#   -m "N <E>"   Maintainer                    (default: $DEBFULLNAME <$DEBEMAIL>)
+#   -r DEPS      extra Recommends, comma separated
+#   -s SECTION   Debian section                (default: misc), e.g. sound, graphics, science
+#   -d DIR       install directory, absolute   (default: /opt/<package>)
+#   -L           make /usr/bin/<command> a symlink to AppRun instead of a wrapper script
+#   -o DIR       output directory              (default: current directory)
+#
+# Requires: dpkg-deb, find, sed, od; binutils (objdump) for the glibc check.
+# No root needed.
+set -eu
+
+usage() { sed -n '/^# Usage/,/^# No root needed/p' "$0" >&2; exit 2; }
+
+PKG= CMD= VERSION= TITLE= MAINT= EXTRA_RECOMMENDS= SYMLINK=0 SECTION=misc DEST= REVISION=
+OUTDIR=$(pwd)
+while getopts n:c:v:R:N:m:r:s:d:Lo:h opt; do
+    case "$opt" in
+        n) PKG=$OPTARG ;;
+        c) CMD=$OPTARG ;;
+        v) VERSION=$OPTARG ;;
+        R) REVISION=$OPTARG ;;
+        N) TITLE=$OPTARG ;;
+        m) MAINT=$OPTARG ;;
+        r) EXTRA_RECOMMENDS=$OPTARG ;;
+        s) SECTION=$OPTARG ;;
+        d) DEST=$OPTARG ;;
+        L) SYMLINK=1 ;;
+        o) OUTDIR=$OPTARG ;;
+        *) usage ;;
+    esac
+done
+shift $((OPTIND - 1))
+[ $# -eq 1 ] || usage
+case "$REVISION" in
+    '') ;;
+    *[!A-Za-z0-9.+~]*|[!0-9]*) echo "invalid revision: $REVISION (use e.g. 1, 2, 1~bpo13+1)" >&2; exit 2 ;;
+esac
+case "$VERSION" in
+    *-*) [ -z "$REVISION" ] || { echo "-v already contains a revision ($VERSION), drop -R" >&2; exit 2; } ;;
+esac
+case "$SECTION" in
+    *[!a-z0-9/+.-]*|'') echo "invalid section: $SECTION" >&2; exit 2 ;;
+esac
+if [ -n "$DEST" ]; then
+    DEST=$(printf '%s' "$DEST" | sed -E 's#/+#/#g; s#/$##')
+    case "$DEST" in
+        /*) ;;
+        *) echo "-d needs an absolute path, got: $DEST" >&2; exit 2 ;;
+    esac
+    case "$DEST" in
+        /|/usr|/usr/bin|/usr/lib|/usr/share|/bin|/lib|/etc|/opt|/var|/home|/tmp)
+            echo "-d must be a dedicated directory, not $DEST" >&2; exit 2 ;;
+    esac
+fi
+APPIMAGE=$(readlink -f "$1")
+[ -f "$APPIMAGE" ] || { echo "not found: $1" >&2; exit 1; }
+command -v dpkg-deb >/dev/null || { echo "dpkg-deb not installed" >&2; exit 1; }
+
+# lower-case, Debian-safe slug: [a-z0-9+.-], starting with an alphanumeric
+slug() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E \
+        -e 's/[^a-z0-9+.-]+/-/g' -e 's/-+/-/g' -e 's/^[^a-z0-9]+//' -e 's/[-.]+$//'
+}
+desktop_value() {  # desktop_value FILE KEY -> first value from [Desktop Entry]
+    sed -n '/^\[Desktop Entry\]/,/^\[/{s/^'"$2"'=//p}' "$1" | head -n1
+}
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT INT TERM
+
+echo "== extracting $(basename "$APPIMAGE")"
+cp "$APPIMAGE" "$WORK/app.AppImage"
+chmod +x "$WORK/app.AppImage"
+( cd "$WORK" && ./app.AppImage --appimage-extract >/dev/null 2>&1 ) || true
+SQ="$WORK/squashfs-root"
+[ -e "$SQ/AppRun" ] || { echo "extraction failed (no AppRun); only type 2 AppImages are supported" >&2; exit 1; }
+
+# ---- metadata from the AppImage's own desktop entry
+DESKTOP_SRC=$(find "$SQ" -maxdepth 1 -name '*.desktop' | head -n1)
+[ -n "$DESKTOP_SRC" ] || DESKTOP_SRC=$(find "$SQ/usr/share/applications" -name '*.desktop' 2>/dev/null | head -n1)
+D_NAME= D_EXEC= D_ICON= D_COMMENT= D_GENERIC= D_VERSION=
+if [ -n "$DESKTOP_SRC" ]; then
+    D_NAME=$(desktop_value "$DESKTOP_SRC" Name)
+    D_EXEC=$(desktop_value "$DESKTOP_SRC" Exec | awk '{print $1}')
+    D_ICON=$(desktop_value "$DESKTOP_SRC" Icon)
+    D_COMMENT=$(desktop_value "$DESKTOP_SRC" Comment)
+    D_GENERIC=$(desktop_value "$DESKTOP_SRC" GenericName)
+    D_VERSION=$(desktop_value "$DESKTOP_SRC" X-AppImage-Version)
+fi
+
+# base name: desktop file name, else Exec binary, else Name, else AppImage file name
+fname=$(basename "$APPIMAGE" .AppImage)
+base=
+[ -n "$DESKTOP_SRC" ] && base=$(slug "$(basename "$DESKTOP_SRC" .desktop | sed 's/.*\.//')")
+[ -n "$base" ] || base=$(slug "$(basename "${D_EXEC:-}")")
+[ -n "$base" ] || base=$(slug "$D_NAME")
+[ -n "$base" ] || base=$(slug "$(printf '%s' "$fname" | sed -E 's/[-_ ]v?[0-9].*$//')")
+[ -n "$base" ] || { echo "cannot derive a name, use -n and -c" >&2; exit 1; }
+
+[ -n "$PKG" ] || PKG="$base-appimage"
+PKG=$(slug "$PKG")
+if [ -z "$CMD" ]; then
+    CMD=$base
+    if [ -e "/usr/bin/$CMD" ]; then
+        owner=$(dpkg -S "/usr/bin/$CMD" 2>/dev/null | cut -d: -f1 || true)
+        if [ "$owner" != "$PKG" ]; then
+            echo "note: /usr/bin/$CMD already exists${owner:+ (package $owner)}, using $base-appimage" >&2
+            CMD="$base-appimage"
+        fi
+    fi
+fi
+[ -n "$TITLE" ] || TITLE=${D_NAME:-$base}
+
+if [ -z "$VERSION" ]; then
+    upstream=${D_VERSION:-}
+    if [ -z "$upstream" ]; then
+        # drop the architecture suffix, then take the first dotted number plus any suffix
+        noarch=$(printf '%s' "$fname" | sed -E 's/[-_.](x86[-_]64|amd64|aarch64|arm64|armhf|i[36]86)([-_.].*)?$//')
+        upstream=$(printf '%s' "$noarch" | grep -oE '[0-9]+(\.[0-9]+)+([.+~_-]?[A-Za-z0-9]+)*' | head -n1 || true)
+    fi
+    [ -n "$upstream" ] || { echo "cannot derive a version, use -v" >&2; exit 1; }
+    # Debian form: pre-releases sort before the release (1.2-beta.4 -> 1.2~beta4)
+    upstream=$(printf '%s' "$upstream" | sed -E \
+        -e 's/^[vV]//' \
+        -e 's/[-_.]?(alpha|beta|rc|pre)[-_.]?([0-9]*)/~\1\2/I' \
+        -e 's/[^A-Za-z0-9.+~]+/./g')
+    case "$upstream" in [0-9]*) ;; *) upstream="0~$upstream" ;; esac
+    VERSION="$upstream"
+fi
+case "$VERSION" in
+    *-*) ;;                                  # full Debian version given with -v
+    *) VERSION="$VERSION-${REVISION:-1}" ;;
+esac
+if [ -z "$MAINT" ]; then
+    if [ -n "${DEBFULLNAME:-}" ] && [ -n "${DEBEMAIL:-}" ]; then MAINT="$DEBFULLNAME <$DEBEMAIL>"
+    else MAINT="Local build <root@localhost>"; fi
+fi
+
+# ---- architecture from the first ELF file (e_machine at offset 18)
+ARCH=
+for f in "$SQ/AppRun" $(find "$SQ/usr/bin" "$SQ" -maxdepth 1 -type f 2>/dev/null); do
+    [ -f "$f" ] || continue
+    [ "$(head -c4 "$f" | od -An -c | tr -d ' ')" = "177ELF" ] || continue
+    machine=$(od -An -tu2 -j18 -N2 "$f" | tr -d ' ')
+    case "$machine" in
+        62) ARCH=amd64 ;; 183) ARCH=arm64 ;; 3) ARCH=i386 ;; 40) ARCH=armhf ;;
+    esac
+    [ -n "$ARCH" ] && break
+done
+if [ -z "$ARCH" ]; then
+    case "$fname" in
+        *x86_64*|*amd64*) ARCH=amd64 ;; *aarch64*|*arm64*) ARCH=arm64 ;;
+        *i386*|*i686*) ARCH=i386 ;; *) ARCH=$(dpkg --print-architecture) ;;
+    esac
+fi
+
+[ -n "$DEST" ] || DEST="/opt/$PKG"
+ROOT="$WORK/root"
+ICON_NAME=$PKG
+echo "   package: $PKG $VERSION ($ARCH)"
+echo "   command: /usr/bin/$CMD -> $DEST/AppRun"
+echo "   title:   $TITLE"
+
+mkdir -p "$ROOT$DEST" "$ROOT/usr/bin" "$ROOT/usr/share/applications" "$ROOT/DEBIAN"
+cp -a "$SQ/." "$ROOT$DEST/"
+chmod -R u+rwX,go+rX,go-w "$ROOT$DEST"
+# Electron: the sandbox helper must be setuid root, which extraction drops
+find "$ROOT$DEST" -name chrome-sandbox -type f -exec chmod 4755 {} \;
+
+# ---- launcher
+if [ "$SYMLINK" -eq 1 ]; then
+    ln -s "$DEST/AppRun" "$ROOT/usr/bin/$CMD"
+else
+    cat > "$ROOT/usr/bin/$CMD" <<EOF
+#!/bin/sh
+# Launcher for $TITLE ($PKG, repackaged AppImage)
+export APPDIR=$DEST
+exec $DEST/AppRun "\$@"
+EOF
+    chmod 0755 "$ROOT/usr/bin/$CMD"
+fi
+
+# ---- icons: every size of the AppImage's icon, renamed to $ICON_NAME
+icon_found=0
+if [ -n "$D_ICON" ]; then
+    find "$SQ/usr/share/icons" -type f \( -name "$D_ICON.png" -o -name "$D_ICON.svg" -o -name "$D_ICON.svgz" -o -name "$D_ICON.xpm" \) 2>/dev/null |
+    while read -r icon; do
+        rel=${icon#"$SQ/usr/share/icons/"}
+        dir=$(dirname "$rel"); ext=${icon##*.}
+        mkdir -p "$ROOT/usr/share/icons/$dir"
+        cp "$icon" "$ROOT/usr/share/icons/$dir/$ICON_NAME.$ext"
+    done
+    [ -d "$ROOT/usr/share/icons" ] && icon_found=1
+    if [ "$icon_found" -eq 0 ]; then
+        for ext in svg png xpm; do
+            if [ -f "$SQ/$D_ICON.$ext" ]; then
+                mkdir -p "$ROOT/usr/share/pixmaps"
+                cp -L "$SQ/$D_ICON.$ext" "$ROOT/usr/share/pixmaps/$ICON_NAME.$ext"
+                icon_found=1; break
+            fi
+        done
+    fi
+fi
+if [ "$icon_found" -eq 0 ] && [ -e "$SQ/.DirIcon" ]; then
+    mkdir -p "$ROOT/usr/share/pixmaps"
+    if [ "$(head -c4 "$SQ/.DirIcon" | od -An -c | tr -d ' ')" = "211PNG" ]; then ext=png; else ext=svg; fi
+    cp -L "$SQ/.DirIcon" "$ROOT/usr/share/pixmaps/$ICON_NAME.$ext"
+    icon_found=1
+fi
+[ "$icon_found" -eq 1 ] || echo "note: no icon found" >&2
+
+# ---- desktop entry
+DESKTOP_OUT="$ROOT/usr/share/applications/$PKG.desktop"
+if [ -n "$DESKTOP_SRC" ]; then
+    sed -E -e "s|^Exec=[^ ]+|Exec=$CMD|" \
+           -e "s|^TryExec=.*|TryExec=$CMD|" \
+           -e "s|^Icon=.*|Icon=$ICON_NAME|" \
+           -e '/^X-AppImage-/d' \
+           "$DESKTOP_SRC" > "$DESKTOP_OUT"
+    if [ -n "${TITLE:-}" ] && [ "$TITLE" != "$D_NAME" ]; then
+        sed -i -E -e "s|^Name=.*|Name=$TITLE|" -e '/^Name\[[^]]*\]=/d' "$DESKTOP_OUT"
+    fi
+else
+    cat > "$DESKTOP_OUT" <<EOF
+[Desktop Entry]
+Type=Application
+Name=$TITLE
+Exec=$CMD %F
+Icon=$ICON_NAME
+Terminal=false
+Categories=Utility;
+EOF
+fi
+
+# ---- minimum glibc from all ELF files
+GLIBC_MIN=
+if command -v objdump >/dev/null; then
+    GLIBC_MIN=$(find "$ROOT$DEST" -type f -size +0 -print0 \
+        | xargs -0 -r sh -c 'for f; do
+              [ "$(head -c4 "$f" | od -An -c | tr -d " ")" = "177ELF" ] && objdump -T "$f" 2>/dev/null
+          done' _ \
+        | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)+' | sed 's/GLIBC_//' | sort -Vu | tail -n1)
+fi
+if [ -n "$GLIBC_MIN" ]; then
+    DEPENDS="libc6 (>= $GLIBC_MIN)"
+else
+    DEPENDS="libc6"
+    echo "note: objdump (binutils) missing or no symbols, Depends is plain libc6" >&2
+fi
+echo "   depends: $DEPENDS"
+
+# ---- control
+SHORT=${D_GENERIC:-${D_COMMENT:-$TITLE}}
+LONG=${D_COMMENT:-$TITLE}
+size=$(du -sk "$ROOT" | cut -f1)
+{
+    echo "Package: $PKG"
+    echo "Version: $VERSION"
+    echo "Architecture: $ARCH"
+    echo "Maintainer: $MAINT"
+    echo "Installed-Size: $size"
+    echo "Section: $SECTION"
+    echo "Priority: optional"
+    echo "Depends: $DEPENDS"
+    [ -n "$EXTRA_RECOMMENDS" ] && echo "Recommends: $EXTRA_RECOMMENDS"
+    echo "Description: $TITLE - $SHORT (repackaged AppImage)"
+    echo " $LONG"
+    echo " ."
+    echo " Repackaged from $(basename "$APPIMAGE")."
+    echo " Extracted to $DEST, so no FUSE is needed."
+    echo " Start it with \"$CMD\"."
+} > "$ROOT/DEBIAN/control"
+
+mkdir -p "$OUTDIR"
+out="$OUTDIR/${PKG}_${VERSION}_${ARCH}.deb"
+dpkg-deb --root-owner-group -Zxz --build "$ROOT" "$out" >/dev/null
+echo
+echo "built: $out"
