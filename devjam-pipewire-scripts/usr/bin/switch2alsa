@@ -1,4 +1,15 @@
 #!/bin/sh
+# Stop PipeWire until the next logout/reboot and let ALSA clients use the sound card directly.
 
-wireplumber-disable
-alsa-only-start
+[ -n "${XDG_RUNTIME_DIR:-}" ] || { echo "XDG_RUNTIME_DIR is not set" >&2; exit 1; }
+
+# Stopping the sockets as well prevents socket activation from restarting PipeWire.
+systemctl --user stop pipewire-pulse.socket pipewire.socket \
+    pipewire-pulse.service wireplumber.service pipewire.service || exit 1
+systemctl --user stop pulseaudio.socket pulseaudio.service 2>/dev/null
+
+# Picked up by /etc/alsa/conf.d/99z-devjam-alsa-only.conf; lives on tmpfs, so it is gone after logout/reboot.
+printf '%s\n' 'pcm.!default "sysdefault"' 'ctl.!default "sysdefault"' \
+    > "$XDG_RUNTIME_DIR/devjam-alsa-only.conf" || exit 1
+
+! systemctl --user is-active --quiet pipewire.service pipewire-pulse.service wireplumber.service

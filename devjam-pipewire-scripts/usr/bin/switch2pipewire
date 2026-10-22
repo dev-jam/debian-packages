@@ -1,4 +1,8 @@
 #!/bin/sh
+# Undo switch2alsa. Fails if switch2alsa-persistent is active (units masked): use switch2pipewire-persistent.
 
-pipewire-start
-wireplumber-enable
+rm -f "${XDG_RUNTIME_DIR:-/nonexistent}/devjam-alsa-only.conf"
+
+systemctl --user stop pulseaudio.socket pulseaudio.service 2>/dev/null
+systemctl --user start pipewire.socket pipewire-pulse.socket \
+    pipewire.service wireplumber.service pipewire-pulse.service

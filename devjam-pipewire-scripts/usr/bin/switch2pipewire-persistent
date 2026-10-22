@@ -1,4 +1,13 @@
 #!/bin/sh
+# Undo switch2alsa-persistent (and switch2alsa) and start PipeWire now.
 
-pipewire-start-persistent
-wireplumber-enable
+rm -f "$HOME/.config/devjam-pipewire-scripts/alsa-only.conf" \
+    "${XDG_RUNTIME_DIR:-/nonexistent}/devjam-alsa-only.conf"
+
+# Unmask first: a masked unit cannot be started. PulseAudio stays masked.
+systemctl --user unmask pipewire.socket pipewire.service pipewire-pulse.socket \
+    pipewire-pulse.service wireplumber.service || exit 1
+
+systemctl --user stop pulseaudio.socket pulseaudio.service 2>/dev/null
+systemctl --user start pipewire.socket pipewire-pulse.socket \
+    pipewire.service wireplumber.service pipewire-pulse.service

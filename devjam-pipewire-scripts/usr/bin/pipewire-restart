@@ -1,4 +1,4 @@
 #!/bin/sh
+# Restart command as documented in Debian's pipewire README.Debian.
 
-systemctl --user restart pipewire.service pipewire-pulse.socket
-
+systemctl --user restart wireplumber.service pipewire.service pipewire-pulse.service

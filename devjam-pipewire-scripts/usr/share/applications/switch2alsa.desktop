@@ -1,10 +1,9 @@
 [Desktop Entry]
 Version=1.0
-Name=Switch to ALSA only mode
-GenericName=Switch to ALSA only mode
-Comment=Disable Pulse and Pipewire and only use ALSA
-Exec=sh -c "switch2alsa && notify-send -i audio-on 'Switch to ALSA only mode' 'Disable Pulse and Pipewire and only use ALSA' || notify-send -u critical -i dialog-error 'Switch to ALSA only mode' 'Failed: Disable Pulse and Pipewire and only use ALSA'"
-Icon=audio-on
-StartupNotify=true
 Type=Application
-Categories=AudioVideo;
+Name=Switch to ALSA only mode
+Comment=Stop PipeWire and use ALSA only, until the next logout or reboot
+Exec=sh -c "switch2alsa && notify-send -a Audio -i audio-card 'ALSA only mode' 'PipeWire is paused and programs use the sound card directly. PipeWire comes back after logout or reboot.' || notify-send -a Audio -u critical -i dialog-error 'ALSA only mode' 'Could not switch to ALSA only mode. Run switch2alsa in a terminal to see why.'"
+Icon=audio-card
+StartupNotify=false
+Categories=AudioVideo;Audio;

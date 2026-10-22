@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Switch to PipeWire mode (persistent)
+Comment=Enable and start PipeWire again after persistent ALSA only mode
+Exec=sh -c "switch2pipewire-persistent && notify-send -a Audio -i audio-volume-high 'PipeWire mode' 'PipeWire is switched on again and starts automatically at every login.' || notify-send -a Audio -u critical -i dialog-error 'PipeWire mode' 'Could not switch PipeWire back on. Run switch2pipewire-persistent in a terminal to see why.'"
+Icon=audio-volume-high
+StartupNotify=false
+Categories=AudioVideo;Audio;

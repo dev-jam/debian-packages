@@ -1,10 +1,9 @@
 [Desktop Entry]
 Version=1.0
-Name=Switch to Pipewire mode
-GenericName=Switch to Pipewire mode
-Comment=Disable Pulse and Enable Pipewire
-Exec=sh -c "switch2pipewire && notify-send -i audio-on 'Switch to Pipewire mode' 'Disable Pulse and Enable Pipewire' || notify-send -u critical -i dialog-error 'Switch to Pipewire mode' 'Failed: Disable Pulse and Enable Pipewire'"
-Icon=audio-on
-StartupNotify=true
 Type=Application
-Categories=AudioVideo;
+Name=Switch to PipeWire mode
+Comment=Start PipeWire again after ALSA only mode
+Exec=sh -c "switch2pipewire && notify-send -a Audio -i audio-volume-high 'PipeWire mode' 'PipeWire is running again and handles all sound.' || notify-send -a Audio -u critical -i dialog-error 'PipeWire mode' 'Could not start PipeWire. If ALSA only mode was made persistent, use Switch to PipeWire mode (persistent). Run switch2pipewire in a terminal to see why.'"
+Icon=audio-volume-high
+StartupNotify=false
+Categories=AudioVideo;Audio;

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Switch to ALSA only mode (persistent)
+Comment=Stop PipeWire and use ALSA only, also after logout and reboot
+Exec=sh -c "switch2alsa-persistent && notify-send -a Audio -i audio-card 'ALSA only mode (persistent)' 'PipeWire is switched off and stays off after logout and reboot. Programs use the sound card directly.' || notify-send -a Audio -u critical -i dialog-error 'ALSA only mode (persistent)' 'Could not switch to persistent ALSA only mode. Run switch2alsa-persistent in a terminal to see why.'"
+Icon=audio-card
+StartupNotify=false
+Categories=AudioVideo;Audio;

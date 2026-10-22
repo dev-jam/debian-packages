@@ -1,4 +1,0 @@
-#!/bin/sh
-
-pulse-stop
-pipewire-stop

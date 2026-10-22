@@ -1,10 +1,9 @@
 [Desktop Entry]
 Version=1.0
-Name=Restart Pipewire
-GenericName=Restart Pipewire
-Comment=Restart the Pipewire server
-Exec=sh -c "pipewire-restart && notify-send -i audio-on 'Restart Pipewire' 'Restart the Pipewire server' || notify-send -u critical -i dialog-error 'Restart Pipewire' 'Failed: Restart the Pipewire server'"
-Icon=audio-on
-StartupNotify=true
 Type=Application
-Categories=AudioVideo;
+Name=Restart PipeWire
+Comment=Restart PipeWire, WirePlumber and pipewire-pulse
+Exec=sh -c "pipewire-restart && notify-send -a Audio -i view-refresh 'PipeWire restarted' 'The sound system has been restarted.' || notify-send -a Audio -u critical -i dialog-error 'PipeWire restart failed' 'Could not restart PipeWire. Run pipewire-restart in a terminal to see why.'"
+Icon=view-refresh
+StartupNotify=false
+Categories=AudioVideo;Audio;

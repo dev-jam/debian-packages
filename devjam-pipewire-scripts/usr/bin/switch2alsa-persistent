@@ -1,4 +1,19 @@
 #!/bin/sh
+# Stop PipeWire and keep it off for this user after logout/reboot.
 
-wireplumber-disable
-alsa-only-start-persistent
+conf_dir="$HOME/.config/devjam-pipewire-scripts"
+
+systemctl --user stop pipewire-pulse.socket pipewire.socket \
+    pipewire-pulse.service wireplumber.service pipewire.service || exit 1
+systemctl --user stop pulseaudio.socket pulseaudio.service 2>/dev/null
+
+# Masks in ~/.config/systemd/user override the system-wide enablement.
+systemctl --user mask pipewire.socket pipewire.service pipewire-pulse.socket \
+    pipewire-pulse.service wireplumber.service pulseaudio.socket pulseaudio.service || exit 1
+
+# Picked up by /etc/alsa/conf.d/99z-devjam-alsa-only.conf.
+mkdir -p "$conf_dir" || exit 1
+printf '%s\n' 'pcm.!default "sysdefault"' 'ctl.!default "sysdefault"' \
+    > "$conf_dir/alsa-only.conf" || exit 1
+
+! systemctl --user is-active --quiet pipewire.service pipewire-pulse.service wireplumber.service
