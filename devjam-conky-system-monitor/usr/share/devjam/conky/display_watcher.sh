@@ -1,6 +1,18 @@
 #!/bin/bash
-# Detects changes in screen resolution, refresh rate, and scaling factor
-# (supports both X11 and Wayland) and restarts only the Conky process.
+# Detects changes in screen resolution, refresh rate and scaling factor
+# (X11 and Wayland) and restarts only the Conky process.
+#
+# Design notes:
+#   * ONE backend is chosen at startup (KScreen if available, otherwise
+#     xrandr). The two backends are never mixed, because they format the
+#     same mode differently: a fallback during a timeout would look like
+#     a display change and restart Conky.
+#   * A failed or empty measurement returns "ERROR" and the tick is skipped.
+#   * The Xft.dpi value is always part of the fingerprint, so a scale
+#     change is detected on X11 even if KScreen keeps reporting scale 1.
+
+POLL_INTERVAL=5          # seconds between checks (was 2); lower = faster reaction, more CPU
+KSCREEN_TIMEOUT=2s       # kscreen-doctor can stall under heavy CPU load
 
 pidfile="/tmp/conky_display_watcher.pid"
 
@@ -12,14 +24,15 @@ trap 'rm -f "$pidfile"' EXIT
 
 CONKY_CONF="$HOME/.config/conky/conky.conf"
 
-# SAFELY finds only the PIDs of actual conky binary processes (prevents killing
-# terminals, text editors, or scripts that contain 'conky' in their path/name).
+BACKEND="xrandr"
+if command -v kscreen-doctor >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    BACKEND="kscreen"
+fi
+
 find_conky_pids() {
-    # Use pidof to grab genuine binary executables only
-    local pids
+    local pids p pid exe
     pids=$(pidof conky 2>/dev/null)
-    
-    # Fallback if pids is empty (e.g. specific AppImage executables)
+
     if [ -z "$pids" ]; then
         for p in /proc/[0-9]*; do
             pid="${p##*/}"
@@ -34,59 +47,62 @@ find_conky_pids() {
     echo "$pids"
 }
 
+# Prints "<width>x<height>_<refresh>" or nothing on failure
+mode_kscreen() {
+    local out
+    out=$(timeout "$KSCREEN_TIMEOUT" kscreen-doctor -j 2>/dev/null) || return
+    [ -n "$out" ] || return
+    echo "$out" | jq -r 'first(.outputs[] | select(.enabled == true) | . as $o | $o.modes[] | select(.id == $o.currentModeId) | "\(.size.width)x\(.size.height)_\(.refreshRate)") // empty' 2>/dev/null
+}
+
+mode_xrandr() {
+    xrandr --current 2>/dev/null | awk '/\*/ {for (i = 2; i <= NF; i++) if ($i ~ /\*/) {gsub(/[*+]/, "", $i); print $1 "_" $i; exit}}'
+}
+
 get_mode() {
-    local mode=""
-    local dpi=""
-    
-    # Query KScreen with a 2-second timeout to handle high CPU load / starvation
-    local kscreen_out
-    kscreen_out=$(timeout 2s kscreen-doctor -j 2>/dev/null)
-    local kscreen_status=$?
+    local mode dpi
 
-    if [ $kscreen_status -eq 0 ] && [ -n "$kscreen_out" ]; then
-        mode=$(echo "$kscreen_out" | jq -r '.outputs[] | select(.enabled == true) as $out | $out.modes[] | select(.id == $out.currentModeId) | "\(.size.width)x\(.size.height)_\(.refreshRate)"' 2>/dev/null | head -n1)
-        dpi=$(echo "$kscreen_out" | jq -r '.outputs[] | select(.enabled == true) | select(.scale != null) | (.scale * 100 | round)' 2>/dev/null | head -n1)
+    if [ "$BACKEND" = "kscreen" ]; then
+        mode=$(mode_kscreen)
+    else
+        mode=$(mode_xrandr)
     fi
 
-    # Fallback to xrandr if KScreen query failed or returned empty
-    if [ -z "$mode" ] || [ "$mode" = "null" ]; then
-        mode=$(xrandr --current 2>/dev/null | awk '/\*/ {for(i=1;i<=NF;i++) if($i ~ /\*/) print $1 "_" $i}' | head -n1)
-    fi
-
-    if [ -z "$dpi" ] || [ "$dpi" = "null" ]; then
-        dpi=$(xrdb -query 2>/dev/null | grep -i 'Xft.dpi' | grep -o '[0-9]*')
-        [ -z "$dpi" ] && dpi=96
-    fi
-
-    # Return ERROR if display output is invalid or incomplete (e.g., during boot or CPU starvation)
-    if [ -z "$mode" ] || [ "$mode" = "null" ] || ! [[ "$mode" =~ ^[0-9]+x[0-9]+ ]]; then
+    # Invalid or incomplete output (boot, CPU starvation): skip this tick
+    if ! [[ "$mode" =~ ^[0-9]+x[0-9]+_ ]]; then
         echo "ERROR"
         return
     fi
 
-    echo "${mode}_scale${dpi}"
+    # Always the same source for the scale part of the fingerprint
+    dpi=$(xrdb -query 2>/dev/null | grep -i 'Xft.dpi' | grep -o '[0-9]*' | head -n1)
+
+    echo "${mode}_dpi${dpi:-none}"
 }
 
 LAST_MODE=$(get_mode)
 
-# Wait during initial startup until a valid display resolution is detected
+# Wait during initial startup until a valid display mode is detected
 while [ "$LAST_MODE" = "ERROR" ]; do
     sleep 2
     LAST_MODE=$(get_mode)
 done
 
 while true; do
-    sleep 2
+    sleep "$POLL_INTERVAL"
     NEW_MODE=$(get_mode)
 
-    # Only trigger restart if NEW_MODE is valid, non-empty, and different from LAST_MODE
-    if [ "$NEW_MODE" != "ERROR" ] && [ -n "$NEW_MODE" ] && [ "$NEW_MODE" != "$LAST_MODE" ]; then
+    if [ "$NEW_MODE" != "ERROR" ] && [ "$NEW_MODE" != "$LAST_MODE" ]; then
         for pid in $(find_conky_pids); do
             kill "$pid" 2>/dev/null
         done
-        sleep 1
 
-        # Direct robust restart using the predefined configuration path
+        # Wait (max ~5 s) until the old Conky has really exited
+        for _ in $(seq 1 25); do
+            [ -z "$(find_conky_pids)" ] && break
+            sleep 0.2
+        done
+
         nohup conky -c "$CONKY_CONF" >/dev/null 2>&1 &
 
         LAST_MODE="$NEW_MODE"

@@ -1,111 +1,51 @@
 -- ===================================================================
--- Global Variables for CPU Power Measurement
+-- toolbox.lua - helper functions for conky.conf
+--
+-- Design rules:
+--   * No external process in the per-second path (sysfs/procfs only).
+--   * Static values are cached for the lifetime of the Conky process.
+--     display_watcher.sh restarts Conky on a display change, which
+--     refreshes every cache.
+--   * Failed lookups are retried at most every RETRY_SECONDS, so a
+--     missing tool or a busy system can never cause a spawn storm.
+--   * Functions called from conky.text carry the conky_ prefix.
 -- ===================================================================
-local last_energy = nil
-local last_time = nil
+
+local RETRY_SECONDS = 30
 
 -- ===================================================================
--- Global Variables & State for Resolution Watcher & Caching
+-- Helpers
 -- ===================================================================
-local watcher_started = false
-local cached_display_info = nil
-local cached_scale_factor = nil
-
--- ===================================================================
--- Function: Display Scale Factor (5-second interval for KDE settings)
--- ===================================================================
-local cached_scale = nil
-local scale_last_check = 0
-
-function get_scale(size_factor)
-    size_factor = size_factor or 0.8
-    local now = os.time()
-
-    -- Only check screen scale if at least 5 seconds have passed
-    if not cached_scale or (now - scale_last_check >= 5) then
-        local base_scale = 1.0
-
-        -- 1. Check Xft.dpi via xrdb first
-        local handle = io.popen("xrdb -query 2>/dev/null | grep -i 'Xft.dpi'")
-        if handle then
-            local output = handle:read("*a")
-            handle:close()
-            if output then
-                local dpi_str = output:match("(%d+)%s*$")
-                local dpi = tonumber(dpi_str)
-                if dpi and dpi > 0 then
-                    base_scale = dpi / 96.0
-                end
-            end
-        end
-
-        -- 2. Fallback: KScreen via jq
-        if base_scale == 1.0 then
-            local kwin_handle = io.popen("timeout 1s kscreen-doctor -j 2>/dev/null | jq -r '.outputs[] | select(.enabled == true) | select(.scale != null) | .scale' 2>/dev/null | head -n1")
-            if kwin_handle then
-                local kwin_scale_str = kwin_handle:read("*a")
-                kwin_handle:close()
-                local kwin_scale = tonumber(kwin_scale_str)
-                if kwin_scale and kwin_scale > 0 then
-                    base_scale = kwin_scale
-                end
-            end
-        end
-
-        cached_scale = base_scale
-        scale_last_check = now
-    end
-
-    return cached_scale * size_factor
+local function read_line(path)
+    local f = io.open(path, "r")
+    if not f then return nil end
+    local line = f:read("*l")
+    f:close()
+    return line
 end
 
--- ===================================================================
--- Function: Get CPU Model / Brand Name
--- ===================================================================
-function conky_get_cpu_name()
-    local f = io.open("/proc/cpuinfo", "r")
-    if not f then return "N/A" end
-
-    local model_name = nil
-    for line in f:lines() do
-        model_name = line:match("^model name%s*:%s*(.+)")
-        if model_name then break end
-    end
-    f:close()
-
-    if model_name then
-        -- Clean up model name for a clean Conky layout (strips redundant branding)
-        model_name = model_name:gsub("%(R%)", "")
-                              :gsub("%(TM%)", "")
-                              :gsub("12th Gen ", "")
-                              :gsub("13th Gen ", "")
-                              :gsub("14th Gen ", "")
-                              :gsub("Processor", "")
-                              :gsub("CPU", "")
-                              :gsub("%s+", " ")
-                              :match("^%s*(.-)%s*$")
-        return model_name
-    end
-
+local function read_or_na(path)
+    local value = read_line(path)
+    if value and value ~= "" then return value end
     return "N/A"
 end
 
--- ===================================================================
--- Helper Function: Safe single-line file reader
--- ===================================================================
-local function read_sysfs_line(filepath)
-    local f = io.open(filepath, "r")
-    if f then
-        local content = f:read("*l")
-        f:close()
-        return content
-    end
-    return nil
+-- Runs a shell command and returns its full output (or nil).
+-- Only used from cached, retry-limited code paths.
+local function run_cmd(cmd)
+    local h = io.popen(cmd)
+    if not h then return nil end
+    local out = h:read("*a")
+    h:close()
+    return out
 end
 
--- ===================================================================
--- Helper: Parse CPU list ranges (e.g. "0-15,28-31") into a table
--- ===================================================================
+local function first_line(str)
+    if not str then return nil end
+    return str:match("^[^\r\n]+")
+end
+
+-- Parse CPU list ranges (e.g. "0-15,28-31") into a set
 local function parse_cpus_range(str)
     if not str or str == "" then return {} end
     local cpus = {}
@@ -126,7 +66,123 @@ local function parse_cpus_range(str)
 end
 
 -- ===================================================================
--- Function: CPU Core & Thread Count (Intel Hybrid P/E Support)
+-- Display scale (one implementation, used for window sizing AND label)
+-- Priority: X11 Xft.dpi via xrdb; if that says 96 DPI (or is missing)
+-- ask KScreen as well (covers Wayland sessions).
+-- ===================================================================
+local scale_value = nil
+local scale_failed_at = nil
+
+local function detect_scale()
+    if scale_value then return scale_value end
+    if scale_failed_at and os.time() - scale_failed_at < RETRY_SECONDS then
+        return nil
+    end
+
+    local value = nil
+
+    local xrdb_out = run_cmd("xrdb -query 2>/dev/null | grep -i 'Xft.dpi'") or ""
+    local dpi = tonumber(xrdb_out:match("(%d+)%s*$"))
+    if dpi and dpi > 0 then
+        value = dpi / 96.0
+    end
+
+    if not value or value == 1.0 then
+        local kscreen_out = run_cmd(
+            "timeout 1s kscreen-doctor -j 2>/dev/null | " ..
+            "jq -r '.outputs[] | select(.enabled == true) | select(.scale != null) | .scale' 2>/dev/null | " ..
+            "head -n1") or ""
+        local kscreen_scale = tonumber(kscreen_out)
+        if kscreen_scale and kscreen_scale > 0 then
+            value = kscreen_scale
+        end
+    end
+
+    if value then
+        scale_value = value
+        scale_failed_at = nil
+    else
+        scale_failed_at = os.time()
+    end
+    return value
+end
+
+-- Called from conky.conf at parse time (global, no conky_ prefix)
+function get_scale(size_factor)
+    return (detect_scale() or 1.0) * (size_factor or 0.8)
+end
+
+function conky_get_scale_factor()
+    local s = detect_scale()
+    if not s then return "N/A" end
+    return string.format("%d%%", math.floor(s * 100 + 0.5))
+end
+
+-- ===================================================================
+-- Display info (resolution & refresh rate) - cached
+-- ===================================================================
+local display_info = nil
+local display_failed_at = nil
+
+local KSCREEN_DISPLAY_CMD = [==[timeout 1s kscreen-doctor -j 2>/dev/null | jq -r '.outputs[] | select(.enabled == true) as $out | $out.modes[] | select(.id == $out.currentModeId) | "\(.size.width)x\(.size.height)@\( ((.refreshRate - (.refreshRate | round)) | if . < 0 then -. else . end) as $diff | if $diff < 0.01 then (.refreshRate | round) else ((.refreshRate * 100 | round) / 100) end)Hz"' 2>/dev/null | head -n1]==]
+
+local XRANDR_DISPLAY_CMD = [==[xrandr --current 2>/dev/null | awk '/\*/ {print $1 "@" int($2) "Hz"; exit}']==]
+
+function conky_get_display_info()
+    if display_info then return display_info end
+    if display_failed_at and os.time() - display_failed_at < RETRY_SECONDS then
+        return "N/A"
+    end
+
+    local res = first_line(run_cmd(KSCREEN_DISPLAY_CMD))
+    if not res or res == "null" then
+        res = first_line(run_cmd(XRANDR_DISPLAY_CMD))
+    end
+
+    if res and res ~= "" and res ~= "null" then
+        display_info = res
+        return display_info
+    end
+
+    display_failed_at = os.time()
+    return "N/A"
+end
+
+-- ===================================================================
+-- CPU model name (static -> cached)
+-- ===================================================================
+local cpu_name_cache = nil
+
+function conky_get_cpu_name()
+    if cpu_name_cache then return cpu_name_cache end
+
+    local model_name = nil
+    local f = io.open("/proc/cpuinfo", "r")
+    if f then
+        for line in f:lines() do
+            model_name = line:match("^model name%s*:%s*(.+)")
+            if model_name then break end
+        end
+        f:close()
+    end
+
+    if model_name then
+        -- Strip redundant branding for a clean layout
+        model_name = model_name:gsub("%(R%)", "")
+        model_name = model_name:gsub("%(TM%)", "")
+        model_name = model_name:gsub("%d+th Gen ", "")
+        model_name = model_name:gsub("Processor", "")
+        model_name = model_name:gsub("CPU", "")
+        model_name = model_name:gsub("%s+", " ")
+        model_name = model_name:match("^%s*(.-)%s*$")
+    end
+
+    cpu_name_cache = (model_name and model_name ~= "") and model_name or "N/A"
+    return cpu_name_cache
+end
+
+-- ===================================================================
+-- CPU core & thread count (Intel hybrid P/E support) - cached
 -- ===================================================================
 local cached_cpu_cores_info = nil
 
@@ -138,7 +194,7 @@ function conky_get_cpu_cores()
     local threads = 0
     local core_map = {}
     local f = io.open("/proc/cpuinfo", "r")
-    
+
     if f then
         local phys_id = "0"
         for line in f:lines() do
@@ -162,38 +218,31 @@ function conky_get_cpu_cores()
     end
     if phys_cores == 0 then phys_cores = threads end
 
-    -- Check PMU & sysfs candidate paths for P-core and E-core CPU lists
-    local p_str = read_sysfs_line("/sys/bus/event_source/devices/cpu_core/cpus") 
-               or read_sysfs_line("/sys/devices/cpu_core/cpus")
-               or read_sysfs_line("/sys/devices/system/cpu/types/core/cpus")
+    -- PMU & sysfs candidate paths for P-core and E-core CPU lists
+    local p_str = read_line("/sys/bus/event_source/devices/cpu_core/cpus")
+               or read_line("/sys/devices/cpu_core/cpus")
+               or read_line("/sys/devices/system/cpu/types/core/cpus")
 
-    local e_str = read_sysfs_line("/sys/bus/event_source/devices/cpu_atom/cpus") 
-               or read_sysfs_line("/sys/devices/cpu_atom/cpus")
-               or read_sysfs_line("/sys/devices/system/cpu/types/atom/cpus")
+    local e_str = read_line("/sys/bus/event_source/devices/cpu_atom/cpus")
+               or read_line("/sys/devices/cpu_atom/cpus")
+               or read_line("/sys/devices/system/cpu/types/atom/cpus")
 
     if p_str or e_str then
-        local p_cpus = parse_cpus_range(p_str)
-        local e_cpus = parse_cpus_range(e_str)
-
-        local p_phys_map = {}
-        local e_phys_map = {}
-
-        for cpu_id in pairs(p_cpus) do
-            local cid = read_sysfs_line("/sys/devices/system/cpu/cpu" .. cpu_id .. "/topology/core_id")
-            local pid = read_sysfs_line("/sys/devices/system/cpu/cpu" .. cpu_id .. "/topology/physical_package_id") or "0"
-            if cid then p_phys_map[pid .. ":" .. cid] = true end
+        local function count_physical(cpu_set)
+            local map = {}
+            for cpu_id in pairs(cpu_set) do
+                local base = "/sys/devices/system/cpu/cpu" .. cpu_id .. "/topology/"
+                local cid = read_line(base .. "core_id")
+                local pid = read_line(base .. "physical_package_id") or "0"
+                if cid then map[pid .. ":" .. cid] = true end
+            end
+            local n = 0
+            for _ in pairs(map) do n = n + 1 end
+            return n
         end
 
-        for cpu_id in pairs(e_cpus) do
-            local cid = read_sysfs_line("/sys/devices/system/cpu/cpu" .. cpu_id .. "/topology/core_id")
-            local pid = read_sysfs_line("/sys/devices/system/cpu/cpu" .. cpu_id .. "/topology/physical_package_id") or "0"
-            if cid then e_phys_map[pid .. ":" .. cid] = true end
-        end
-
-        local p_count = 0
-        for _ in pairs(p_phys_map) do p_count = p_count + 1 end
-        local e_count = 0
-        for _ in pairs(e_phys_map) do e_count = e_count + 1 end
+        local p_count = count_physical(parse_cpus_range(p_str))
+        local e_count = count_physical(parse_cpus_range(e_str))
 
         if p_count > 0 or e_count > 0 then
             cached_cpu_cores_info = string.format("%d Cores (%dP + %dE) / %d Threads", phys_cores, p_count, e_count, threads)
@@ -206,318 +255,344 @@ function conky_get_cpu_cores()
 end
 
 -- ===================================================================
--- Function: CPU Scaling Driver (e.g. intel_pstate, amd-pstate)
+-- CPU scaling driver, governor and EPP (all live, one tiny sysfs read each).
+-- The driver is NOT cached: it can change at runtime, e.g. intel_pstate
+-- switching between active and passive mode changes the reported name.
 -- ===================================================================
+local CPUFREQ_DIR = "/sys/devices/system/cpu/cpu0/cpufreq/"
+
 function conky_get_cpu_driver()
-    local f = io.open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_driver", "r")
-    if not f then return "N/A" end
-    
-    local driver = f:read("*l")
-    f:close()
-    
-    if driver and driver ~= "" then
-        return driver
-    end
-    
-    return "N/A"
+    return read_or_na(CPUFREQ_DIR .. "scaling_driver")
+end
+
+function conky_get_cpu_governor()
+    return read_or_na(CPUFREQ_DIR .. "scaling_governor")
+end
+
+function conky_get_cpu_epp()
+    return read_or_na(CPUFREQ_DIR .. "energy_performance_preference")
 end
 
 -- ===================================================================
--- Optimized Function: Universal CPU Temperature (Pure Lua Sysfs)
+-- CPU temperature (pure sysfs). The hwmon file is located ONCE.
+-- Prefers labelled package sensors, falls back to temp1_input.
 -- ===================================================================
-local cached_hwmon_file = nil
+local CPU_HWMON_NAMES = { coretemp = true, k10temp = true, zenpower = true, cpu_thermal = true }
+local TEMP_LABEL_RANK = { ["Package id 0"] = 1, ["Tdie"] = 2, ["Tctl"] = 3, ["CPU Package"] = 4 }
 
-function conky_get_cpu_temp()
-    -- Find the hardware monitor temp file ONCE to prevent spawning processes every second
-    if not cached_hwmon_file then
-        for i = 0, 10 do
-            local hwmon_path = "/sys/class/hwmon/hwmon" .. i
-            local f = io.open(hwmon_path .. "/name", "r")
-            if f then
-                local name = f:read("*l")
-                f:close()
-                if name == "coretemp" or name == "k10temp" or name == "zenpower" or name == "cpu_thermal" then
-                    -- Default to temp1_input, which is standard for most CPUs
-                    cached_hwmon_file = hwmon_path .. "/temp1_input"
-                    break
+local hwmon_temp_file = nil
+local hwmon_failed_at = nil
+
+local function find_cpu_temp_file()
+    local best_file, best_rank = nil, 99
+    for i = 0, 63 do
+        local dir = "/sys/class/hwmon/hwmon" .. i
+        local name = read_line(dir .. "/name")
+        if name and CPU_HWMON_NAMES[name] then
+            if not best_file then
+                best_file, best_rank = dir .. "/temp1_input", 50
+            end
+            for j = 1, 10 do
+                local label = read_line(dir .. "/temp" .. j .. "_label")
+                local rank = label and TEMP_LABEL_RANK[label]
+                if rank and rank < best_rank then
+                    best_file, best_rank = dir .. "/temp" .. j .. "_input", rank
                 end
             end
         end
     end
+    return best_file
+end
 
-    -- Directly read the file (Instantaneous, 0 CPU overhead)
-    if cached_hwmon_file then
-        local f = io.open(cached_hwmon_file, "r")
-        if f then
-            local temp_str = f:read("*a")
-            f:close()
-            local temp = tonumber(temp_str)
-            if temp then
-                return string.format("%d°C", math.floor((temp / 1000) + 0.5))
-            end
+function conky_get_cpu_temp()
+    if not hwmon_temp_file then
+        if hwmon_failed_at and os.time() - hwmon_failed_at < RETRY_SECONDS then
+            return "N/A"
+        end
+        hwmon_temp_file = find_cpu_temp_file()
+        if not hwmon_temp_file then
+            hwmon_failed_at = os.time()
+            return "N/A"
         end
     end
-    
-    return "N/A"
+
+    local temp = tonumber(read_line(hwmon_temp_file))
+    if not temp then
+        -- Sensor vanished or unreadable: forget it and retry later
+        hwmon_temp_file = nil
+        hwmon_failed_at = os.time()
+        return "N/A"
+    end
+    return string.format("%d°C", math.floor((temp / 1000) + 0.5))
 end
 
 -- ===================================================================
--- Function: CPU Max Frequency Across All Cores
+-- CPU max frequency across all cores
+-- The list of readable scaling_cur_freq files is built ONCE.
 -- ===================================================================
-function conky_get_cpu_freq_max()
-    local max_khz = 0
-    local core = 0
+local freq_paths = nil
 
-    -- Iterate through all cores in /sys/devices/system/cpu/cpuX/cpufreq/scaling_cur_freq
-    while true do
-        local f = io.open(string.format("/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq", core), "r")
-        if not f then break end -- Stop when no further core is found
+local function build_freq_paths()
+    local cpus = parse_cpus_range(read_line("/sys/devices/system/cpu/present"))
+    if next(cpus) == nil then
+        for i = 0, 127 do cpus[i] = true end
+    end
 
-        local val = tonumber(f:read("*l"))
-        f:close()
+    local ids = {}
+    for id in pairs(cpus) do ids[#ids + 1] = id end
+    table.sort(ids)
 
-        if val and val > max_khz then
-            max_khz = val
+    local paths = {}
+    for _, id in ipairs(ids) do
+        local p = string.format("/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq", id)
+        local f = io.open(p, "r")
+        if f then
+            f:close()
+            paths[#paths + 1] = p
         end
-        core = core + 1
+    end
+    return paths
+end
+
+function conky_get_cpu_freq_max()
+    if not freq_paths then freq_paths = build_freq_paths() end
+
+    local max_khz = 0
+    for _, p in ipairs(freq_paths) do
+        local val = tonumber(read_line(p))   -- an offline CPU simply yields nil
+        if val and val > max_khz then max_khz = val end
     end
 
     if max_khz > 0 then
         return string.format("%.2f GHz", max_khz / 1000000)
     end
-
     return "N/A"
 end
 
 -- ===================================================================
--- Function: CPU Scaling Governor
+-- CPU package power (intel-rapl)
+-- Note: recent kernels make energy_uj root-only; this returns "N/A"
+-- when the file is not readable for the Conky user.
 -- ===================================================================
-function conky_get_cpu_governor()
-    local f = io.open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "r")
-    if not f then return "N/A" end
-    
-    local gov = f:read("*l")
-    f:close()
-    
-    if gov and gov ~= "" then
-        return gov
-    end
-    
-    return "N/A"
-end
+local RAPL_DIR = "/sys/class/powercap/intel-rapl/intel-rapl:0/"
+local last_energy, last_time = nil, nil
+local rapl_max_range = nil
 
--- ===================================================================
--- Function: CPU Energy Performance Preference (EPP)
--- ===================================================================
-function conky_get_cpu_epp()
-    local f = io.open("/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference", "r")
-    if not f then return "N/A" end
-    
-    local epp = f:read("*l")
-    f:close()
-    
-    if epp and epp ~= "" then
-        return epp
-    end
-    
-    return "N/A"
-end
-
--- ===================================================================
--- Function: CPU Power Draw (intel-rapl)
--- ===================================================================
 function conky_get_cpu_power()
-    local file = io.open("/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj", "r")
-    if not file then return "N/A" end
-    
-    local energy_str = file:read("*all")
-    file:close()
-    
-    local energy = tonumber(energy_str)
-    
-    -- Read exact system uptime in seconds with microsecond precision
-    local now = nil
-    local uptime_file = io.open("/proc/uptime", "r")
-    if uptime_file then
-        local uptime_str = uptime_file:read("*all")
-        uptime_file:close()
-        now = tonumber(uptime_str:match("^(%S+)"))
-    else
-        now = os.time()
-    end
-    
-    if last_energy and last_time and energy and now then
+    local energy = tonumber(read_line(RAPL_DIR .. "energy_uj"))
+    if not energy then return "N/A" end
+
+    -- /proc/uptime has a resolution of 0.01 s
+    local uptime = read_line("/proc/uptime")
+    local now = (uptime and tonumber(uptime:match("^(%S+)"))) or os.time()
+
+    local result = "N/A"
+    if last_energy and last_time then
         local de = energy - last_energy
         local dt = now - last_time
-        
+
+        -- The counter wraps around at max_energy_range_uj
+        if de < 0 then
+            rapl_max_range = rapl_max_range or tonumber(read_line(RAPL_DIR .. "max_energy_range_uj"))
+            if rapl_max_range then de = de + rapl_max_range end
+        end
+
         if dt > 0 and de >= 0 then
-            local watts = (de / dt) / 1000000
-            last_energy = energy
-            last_time = now
-            return string.format("%.2f W", watts)
+            result = string.format("%.2f W", (de / dt) / 1000000)
         end
     end
-    
-    last_energy = energy
-    last_time = now
-    return "N/A"
+
+    last_energy, last_time = energy, now
+    return result
 end
 
 -- ===================================================================
--- Optimized Helper: Auto-detect Active Network Interface (10s Cache)
+-- Network: ALL active physical interfaces, lowest route metric first.
+--
+-- "Active" = not virtual (lo, bridges, docker, veth, virbr, vnet, tap,
+-- tun, wg, tailscale) and either operstate "up" or owning an IPv4 default
+-- route. Interfaces with a default route come first, sorted by metric
+-- (lowest = highest priority); interfaces without one follow in kernel
+-- order. conky.text shows up to MAX_NET_IFACES "slots"; each slot asks
+-- for its interface by number via net_label/net_down/net_up/..._percent.
+-- The list (and each link speed) is refreshed every 10 s.
+-- IPv6-only default routes are not considered.
 -- ===================================================================
-local cached_net_iface = nil
-local last_net_check = 0
+local MAX_NET_IFACES = 4
+local DEFAULT_LINK_MBIT = 1000
+local NET_REFRESH_SECONDS = 10
 
-local function get_active_interface()
-    local now = os.time()
-    
-    -- Only re-evaluate network interfaces every 10 seconds to allow smooth transitions
-    if cached_net_iface and (now - last_net_check < 10) then
-        return cached_net_iface
+local VIRTUAL_IFACE_PATTERNS = {
+    "^lo$", "^br%-", "^docker", "^veth", "^virbr", "^vnet",
+    "^tap", "^tun", "^wg", "^tailscale",
+}
+
+local function is_virtual_iface(name)
+    for _, pattern in ipairs(VIRTUAL_IFACE_PATTERNS) do
+        if name:match(pattern) then return true end
     end
+    return false
+end
 
-    local best_iface = ""
+-- iface -> lowest metric of its IPv4 default routes
+local function read_default_route_metrics()
+    local metrics = {}
+    local f = io.open("/proc/net/route", "r")
+    if not f then return metrics end
+
+    local header = true
+    for line in f:lines() do
+        if header then
+            header = false
+        else
+            local iface, dest, flags, metric =
+                line:match("^(%S+)%s+(%x+)%s+%x+%s+(%x+)%s+%d+%s+%d+%s+(%d+)")
+            if iface and dest == "00000000"
+               and tonumber(flags, 16) % 2 == 1          -- RTF_UP
+               and not is_virtual_iface(iface) then
+                metric = tonumber(metric)
+                if not metrics[iface] or metric < metrics[iface] then
+                    metrics[iface] = metric
+                end
+            end
+        end
+    end
+    f:close()
+    return metrics
+end
+
+local function discover_interfaces()
+    local metrics = read_default_route_metrics()
+    local found = {}
+
     local f = io.open("/proc/net/dev", "r")
     if f then
+        local order = 0
         for line in f:lines() do
-            local iface = line:match("^%s*([%w%-]+):")
-            -- Exclude loopback, virtual bridges, and docker interfaces
-            if iface and iface ~= "lo" and not iface:match("^br%-") and not iface:match("^docker") and not iface:match("^veth") then
-                -- Check if the interface is actually physically 'up'
-                local state_f = io.open("/sys/class/net/" .. iface .. "/operstate", "r")
-                if state_f then
-                    local state = state_f:read("*l")
-                    state_f:close()
-                    if state == "up" then
-                        best_iface = iface
-                        break
-                    end
+            local iface = line:match("^%s*([%w%-%._]+):")
+            if iface and not is_virtual_iface(iface) then
+                local is_up = read_line("/sys/class/net/" .. iface .. "/operstate") == "up"
+                if is_up or metrics[iface] then
+                    order = order + 1
+                    -- Wi-Fi (and some virtual NICs) report no usable speed
+                    local mbit = tonumber(read_line("/sys/class/net/" .. iface .. "/speed") or "")
+                    local known = (mbit ~= nil and mbit > 0)
+                    found[#found + 1] = {
+                        name = iface,
+                        metric = metrics[iface],
+                        order = order,
+                        mbit = known and mbit or DEFAULT_LINK_MBIT,
+                        speed_known = known,
+                    }
                 end
             end
         end
         f:close()
     end
 
-    cached_net_iface = best_iface
-    last_net_check = now
-    return cached_net_iface
-end
-
--- ===================================================================
--- Functions: Network Speed & Percentages (1 Gbit / 125 MB/s)
--- ===================================================================
-function conky_get_downspeed()
-    local iface = get_active_interface()
-    local speed = conky_parse('${downspeed ' .. iface .. '}')
-    return speed .. '/s'
-end
-
-function conky_get_upspeed()
-    local iface = get_active_interface()
-    local speed = conky_parse('${upspeed ' .. iface .. '}')
-    return speed .. '/s'
-end
-
-function conky_down_percent(iface)
-    if not iface or iface == "" then
-        iface = get_active_interface()
-    end
-    local speed = tonumber(conky_parse('${downspeedf ' .. iface .. '}')) or 0
-    local pct = (speed / 125000) * 100
-    return math.min(pct, 100)
-end
-
-function conky_up_percent(iface)
-    if not iface or iface == "" then
-        iface = get_active_interface()
-    end
-    local speed = tonumber(conky_parse('${upspeedf ' .. iface .. '}')) or 0
-    local pct = (speed / 125000) * 100
-    return math.min(pct, 100)
-end
-
--- ===================================================================
--- Function: Display Info (Resolution & Refresh Rate) - Cached
--- ===================================================================
-function conky_get_display_info()
-    if cached_display_info then
-        return cached_display_info
-    end
-
-    -- 1. KScreen
-    local cmd = [[timeout 1s kscreen-doctor -j 2>/dev/null | jq -r '.outputs[] | select(.enabled == true) as $out | $out.modes[] | select(.id == $out.currentModeId) | "\(.size.width)x\(.size.height)@\( ((.refreshRate - (.refreshRate | round)) | if . < 0 then -. else . end) as $diff | if $diff < 0.01 then (.refreshRate | round) else ((.refreshRate * 100 | round) / 100) end)Hz"' 2>/dev/null | head -n1]]
-
-    local h = io.popen(cmd)
-    if h then
-        local res = h:read("*l")
-        h:close()
-        if res and res ~= "" and res ~= "null" then
-            cached_display_info = res
-            return cached_display_info
+    table.sort(found, function(a, b)
+        if a.metric and b.metric then
+            if a.metric ~= b.metric then return a.metric < b.metric end
+            return a.order < b.order
         end
-    end
+        if a.metric then return true end
+        if b.metric then return false end
+        return a.order < b.order
+    end)
 
-    -- 2. Fallback: xrandr
-    local h_xrandr = io.popen([[xrandr --current 2>/dev/null | awk '/\*/ {print $1 "@" int($2) "Hz"; exit}']])
-    if h_xrandr then
-        local res_xrandr = h_xrandr:read("*l")
-        h_xrandr:close()
-        if res_xrandr and res_xrandr ~= "" then
-            cached_display_info = res_xrandr
-            return cached_display_info
-        end
-    end
+    while #found > MAX_NET_IFACES do table.remove(found) end
+    return found
+end
 
-    return "N/A"
+local net_ifaces = {}
+local net_checked_at = nil
+
+local function get_net_interfaces()
+    local now = os.time()
+    local ttl = (#net_ifaces == 0) and 2 or NET_REFRESH_SECONDS
+    if net_checked_at and now - net_checked_at < ttl then
+        return net_ifaces
+    end
+    net_ifaces = discover_interfaces()
+    net_checked_at = now
+    return net_ifaces
+end
+
+-- `arg` is the slot number passed from conky.text, e.g. ${lua net_label 2}
+local function slot_nic(arg)
+    local index = tonumber(arg)
+    if not index then return nil end
+    return get_net_interfaces()[index]
+end
+
+local function format_link_speed(mbit, known)
+    local text
+    if mbit >= 1000 then
+        -- 1000 -> "1 Gbit/s", 2500 -> "2.5 Gbit/s", 10000 -> "10 Gbit/s"
+        local gbit = string.format("%.1f", mbit / 1000):gsub("%.0$", "")
+        text = gbit .. " Gbit/s"
+    else
+        text = string.format("%d Mbit/s", math.floor(mbit))   -- e.g. "100 Mbit/s"
+    end
+    -- A trailing "*" marks an assumed speed (the kernel did not report one)
+    return known and text or (text .. "*")
+end
+
+-- Label for a slot; empty string = slot unused (conky.text hides it).
+-- Slot 1 is always visible so the widget never shows nothing at all.
+function conky_net_label(arg)
+    local nic = slot_nic(arg)
+    if not nic then
+        if tonumber(arg) == 1 then return "no active interface" end
+        return ""
+    end
+    local label = nic.name .. " (" .. format_link_speed(nic.mbit, nic.speed_known)
+    if nic.metric then label = label .. ", metric " .. nic.metric end
+    return label .. ")"
+end
+
+function conky_net_down(arg)
+    local nic = slot_nic(arg)
+    if not nic then return "N/A" end
+    return conky_parse('${downspeed ' .. nic.name .. '}') .. '/s'
+end
+
+function conky_net_up(arg)
+    local nic = slot_nic(arg)
+    if not nic then return "N/A" end
+    return conky_parse('${upspeed ' .. nic.name .. '}') .. '/s'
+end
+
+-- ${downspeedf}/${upspeedf} report KiB/s; the bar maximum is the link speed
+local function speed_percent(arg, conky_var)
+    local nic = slot_nic(arg)
+    if not nic then return 0 end
+    local speed = tonumber(conky_parse('${' .. conky_var .. ' ' .. nic.name .. '}')) or 0
+    local max_kib = nic.mbit * 1000000 / 8 / 1024
+    return math.min((speed / max_kib) * 100, 100)
+end
+
+function conky_down_percent(arg) return speed_percent(arg, "downspeedf") end
+function conky_up_percent(arg)   return speed_percent(arg, "upspeedf")   end
+
+-- ===================================================================
+-- TOP MEMORY value, right-justified to a fixed width.
+-- ${top_mem mem_res N} changes length with the value ("6.06MiB", "512MiB",
+-- "1.23GiB"). Because name and value sit in ONE right-aligned segment, a
+-- longer value pushes the process name to the left. Padding the value to
+-- a constant width keeps all five names in the same column.
+-- ===================================================================
+function conky_top_mem_value(arg)
+    local value = conky_parse('${top_mem mem_res ' .. tostring(arg) .. '}')
+    value = value:match("^%s*(.-)%s*$") or ""
+    return string.format("%7s", value)
 end
 
 -- ===================================================================
--- Function: Get Scaling Factor (e.g. 100%, 125%, 150%) - Cached
+-- Startup hook: launch the display watcher (it has its own pidfile
+-- guard, so repeated calls are harmless)
 -- ===================================================================
-function conky_get_scale_factor()
-    -- If scaling factor was calculated previously, return cached value
-    if cached_scale_factor then
-        return cached_scale_factor
-    end
-
-    -- 1. Read X11 Xft.dpi via xrdb (144 DPI = 150%, 120 DPI = 125%, 96 DPI = 100%)
-    local cmd_dpi = [[xrdb -query 2>/dev/null | grep -i 'Xft.dpi' | grep -o '[0-9]*']]
-    local h = io.popen(cmd_dpi)
-    if h then
-        local dpi = h:read("*l")
-        h:close()
-        if dpi and tonumber(dpi) and tonumber(dpi) > 0 then
-            local calculated_scale = math.floor((tonumber(dpi) / 96) * 100 + 0.5)
-            cached_scale_factor = string.format("%d%%", calculated_scale)
-            return cached_scale_factor
-        end
-    end
-
-    -- 2. Fallback: KScreen scale factor
-    local cmd_kscreen = [[timeout 1s kscreen-doctor -j 2>/dev/null | jq -r '.outputs[] | select(.enabled == true) | select(.scale != null) | "\((.scale * 100 | round))%"' 2>/dev/null | head -n1]]
-    h = io.popen(cmd_kscreen)
-    if h then
-        local scale = h:read("*l")
-        h:close()
-        if scale and scale ~= "" and scale ~= "null%" then
-            cached_scale_factor = scale
-            return cached_scale_factor
-        end
-    end
-
-    cached_scale_factor = "100%"
-    return cached_scale_factor
-end
-
--- ===================================================================
--- Resolution & Refresh Rate Watcher Starter
--- ===================================================================
-function start_resolution_watcher()
-    if watcher_started then return end
-    watcher_started = true
-    
+function conky_start_watcher()
     os.execute("nohup ~/.config/conky/display_watcher.sh >/dev/null 2>&1 &")
+    return ""
 end
-
-start_resolution_watcher()

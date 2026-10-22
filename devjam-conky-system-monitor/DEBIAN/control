@@ -1,9 +1,10 @@
 Package: devjam-conky-system-monitor
-Version: 1.16-3
+Version: 1.17-1
 Section: utils
 Priority: optional
 Architecture: all
-Depends: jq, procps
-Recommends: conky-std, lm-sensors, devjam-cpu-powercap
+Depends: x11-xserver-utils
+Recommends: conky-std | conky-all, devjam-cpu-powercap, jq
+Suggests: libkscreen-bin
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: conky theme
