@@ -1,7 +1,34 @@
 #!/bin/sh
 
-# List of additional packages to install
-PKGS="
+# Usage:
+#   install-psychopy-opensesame          Install standard PsychoPy (with OpenSesame) + PsychoPy Studio
+#   install-psychopy-opensesame --dev    Install ONLY the dev environment in /opt/psychopy/PsychoPy-dev,
+#                                        with the dev-jam plugins taken from git (default branch HEAD)
+#   install-psychopy-opensesame --help   Show this help
+
+INSTALL_DIR="/opt/psychopy"
+DEV_VENV_NAME="PsychoPy-dev"
+DEV_GIT_BASE="https://github.com/dev-jam"
+
+# --- ARGUMENT PARSING ---
+MODE="standard"
+for arg in "$@"; do
+    case "$arg" in
+        --dev) MODE="dev" ;;
+        -h|--help)
+            sed -n '3,7p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $arg" >&2
+            echo "Use --help for usage." >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Packages shared by the standard and the dev environment
+PKGS_COMMON="
 I2MC,
 PyQt6-WebEngine,
 fastnumbers,
@@ -10,15 +37,9 @@ https://github.com/smathot/PyGaze/archive/refs/tags/release/0.8.8.tar.gz,
 opensesame-core,
 opensesame-extension-osweb,
 opensesame-extension-updater,
-opensesame-plugin-audio-low-latency,
-opensesame-plugin-experiment-manager,
 opensesame-plugin-eyelink,
 opensesame-plugin-media_player_mpy,
-opensesame-plugin-parallel-port-trigger,
 opensesame-plugin-psychopy,
-opensesame-plugin-radboudbox,
-opensesame-plugin-screenshot,
-opensesame-plugin-titta-eyetracking,
 opensesame-eyelink-coregraphics,
 pygame-eyelink-coregraphics,
 pipewire_python,
@@ -41,8 +62,35 @@ tittapy,
 tittaslpy
 "
 
-# Format packages into a single string without spaces or newlines for installer arguments
-PKGS_STRING=$(echo "$PKGS" | tr -d ' \n')
+# dev-jam plugins: PyPI release wheels (standard environment)
+PKGS_PLUGINS_PYPI="
+opensesame-plugin-audio-low-latency,
+opensesame-plugin-experiment-manager,
+opensesame-plugin-parallel-port-trigger,
+opensesame-plugin-radboudbox,
+opensesame-plugin-screenshot,
+opensesame-plugin-titta-eyetracking
+"
+
+# dev-jam plugins: git repositories (dev environment)
+# Note: repo names use underscores; no branch is pinned, so HEAD of each repo's
+# default branch is installed.
+PKGS_PLUGINS_GIT="
+git+${DEV_GIT_BASE}/opensesame-plugin-audio_low_latency.git,
+git+${DEV_GIT_BASE}/opensesame-plugin-experiment_manager.git,
+git+${DEV_GIT_BASE}/opensesame-plugin-parallel_port_trigger.git,
+git+${DEV_GIT_BASE}/opensesame-plugin-radboudbox.git,
+git+${DEV_GIT_BASE}/opensesame-plugin-screenshot.git,
+git+${DEV_GIT_BASE}/opensesame-plugin-titta_eyetracking.git
+"
+
+# Join package lists into a single string without spaces or newlines for installer arguments
+join_pkgs() {
+    printf '%s,%s' "$1" "$2" | tr -d ' \n' | sed 's/,,*/,/g; s/^,//; s/,$//'
+}
+
+PKGS_STD_STRING=$(join_pkgs "$PKGS_COMMON" "$PKGS_PLUGINS_PYPI")
+PKGS_DEV_STRING=$(join_pkgs "$PKGS_COMMON" "$PKGS_PLUGINS_GIT")
 
 # Function to print visual banners/separators
 print_banner() {
@@ -53,27 +101,43 @@ print_banner() {
     echo ""
 }
 
+# Function to print a package list as bullets
+print_pkgs() {
+    echo "     --------------------------------------------------------------------------"
+    echo "$1" | tr ',' '\n' | sed '/^[[:space:]]*$/d; s/^[[:space:]]*/       • /'
+    echo "     --------------------------------------------------------------------------"
+}
+
 # --- INSTALLATION SUMMARY ---
 print_banner "INSTALLATION SUMMARY"
 
 echo "The following components will be installed:"
 echo ""
-echo "1. Standard PsychoPy (version: latest)"
-echo "   - Virtual environment: PsychoPy"
-echo "   - Including the following additional packages:"
-echo "     --------------------------------------------------------------------------"
-echo "$PKGS" | tr ',' '\n' | sed '/^[[:space:]]*$/d; s/^[[:space:]]*/       • /'
-echo "     --------------------------------------------------------------------------"
-echo ""
-echo "2. PsychoPy Studio"
-echo "   - Virtual environment: PsychoPy-studio"
-echo "   - WITHOUT additional packages"
+if [ "$MODE" = "dev" ]; then
+    TOTAL_STEPS=2
+    echo "1. PsychoPy DEV (version: latest)"
+    echo "   - Location: ${INSTALL_DIR}/${DEV_VENV_NAME}"
+    echo "   - dev-jam plugins from git (default branch):"
+    print_pkgs "$PKGS_PLUGINS_GIT"
+    echo "   - Other additional packages (PyPI):"
+    print_pkgs "$PKGS_COMMON"
+else
+    TOTAL_STEPS=3
+    echo "1. Standard PsychoPy (version: latest)"
+    echo "   - Location: ${INSTALL_DIR}/PsychoPy"
+    echo "   - Including the following additional packages:"
+    print_pkgs "$PKGS_COMMON,$PKGS_PLUGINS_PYPI"
+    echo ""
+    echo "2. PsychoPy Studio"
+    echo "   - Location: ${INSTALL_DIR}/PsychoPy-studio"
+    echo "   - WITHOUT additional packages"
+fi
 echo ""
 echo "================================================================================"
 echo ""
 
 # --- STEP 1: DOWNLOAD / UPDATE INSTALLER ---
-print_banner "[1/3] Updating / Installing PsychoPy Linux Installer..."
+print_banner "[1/${TOTAL_STEPS}] Updating / Installing PsychoPy Linux Installer..."
 echo "Downloading latest version of psychopy_linux_installer to /usr/local/bin..."
 sudo curl --output-dir /usr/local/bin -LO https://github.com/wieluk/psychopy_linux_installer/releases/latest/download/psychopy_linux_installer
 
@@ -82,29 +146,47 @@ sudo chmod +x /usr/local/bin/psychopy_linux_installer
 
 echo "psychopy_linux_installer update complete."
 
-# --- STEP 2: INSTALL STANDARD PSYCHOPY ---
-print_banner "[2/3] Installing Standard PsychoPy (with additional packages)..."
-sudo /usr/local/bin/psychopy_linux_installer \
-  --psychopy-version=latest \
-  --target-users="${SUDO_USER:-$USER}" \
-  --desktop-shortcuts=none \
-  --venv-name=PsychoPy \
-  --force-overwrite \
-  --sudo-mode=auto \
-  --log-level=info \
-  --non-interactive \
-  --additional-packages="$PKGS_STRING"
+if [ "$MODE" = "dev" ]; then
+    # --- STEP 2 (DEV): INSTALL PSYCHOPY DEV ---
+    print_banner "[2/${TOTAL_STEPS}] Installing PsychoPy DEV (dev-jam plugins from git)..."
+    sudo /usr/local/bin/psychopy_linux_installer \
+      --psychopy-version=latest \
+      --target-users="${SUDO_USER:-$USER}" \
+      --desktop-shortcuts=none \
+      --install-dir="$INSTALL_DIR" \
+      --venv-name="$DEV_VENV_NAME" \
+      --force-overwrite \
+      --sudo-mode=auto \
+      --log-level=info \
+      --non-interactive \
+      --additional-packages="$PKGS_DEV_STRING"
+else
+    # --- STEP 2: INSTALL STANDARD PSYCHOPY ---
+    print_banner "[2/${TOTAL_STEPS}] Installing Standard PsychoPy (with additional packages)..."
+    sudo /usr/local/bin/psychopy_linux_installer \
+      --psychopy-version=latest \
+      --target-users="${SUDO_USER:-$USER}" \
+      --desktop-shortcuts=none \
+      --install-dir="$INSTALL_DIR" \
+      --venv-name=PsychoPy \
+      --force-overwrite \
+      --sudo-mode=auto \
+      --log-level=info \
+      --non-interactive \
+      --additional-packages="$PKGS_STD_STRING"
 
-# --- STEP 3: INSTALL PSYCHOPY STUDIO ---
-print_banner "[3/3] Installing PsychoPy Studio (without additional packages)..."
-sudo /usr/local/bin/psychopy_linux_installer \
-  --studio \
-  --target-users="${SUDO_USER:-$USER}" \
-  --desktop-shortcuts=none \
-  --venv-name=PsychoPy-studio \
-  --force-overwrite \
-  --sudo-mode=auto \
-  --log-level=info \
-  --non-interactive
+    # --- STEP 3: INSTALL PSYCHOPY STUDIO ---
+    print_banner "[3/${TOTAL_STEPS}] Installing PsychoPy Studio (without additional packages)..."
+    sudo /usr/local/bin/psychopy_linux_installer \
+      --studio \
+      --target-users="${SUDO_USER:-$USER}" \
+      --desktop-shortcuts=none \
+      --install-dir="$INSTALL_DIR" \
+      --venv-name=PsychoPy-studio \
+      --force-overwrite \
+      --sudo-mode=auto \
+      --log-level=info \
+      --non-interactive
+fi
 
 print_banner "INSTALLATION SUCCESSFULLY COMPLETED!"
