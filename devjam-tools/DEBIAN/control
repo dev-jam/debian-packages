@@ -1,9 +1,15 @@
 Package: devjam-tools
-Version: 1.91-1
+Version: 1.92-1
 Section: utils
 Priority: optional
 Architecture: all
-Recommends: sox,
+Depends: curl,
+ jq,
+ ca-certificates,
+ mawk | gawk
+Recommends: sudo,
+ gh,
+ sox,
  flac,
  wl-clipboard,
  packaging-dev,
@@ -20,10 +26,8 @@ Recommends: sox,
  mkvtoolnix,
  rsync,
  perl,
- tar,
  linux-cpupower,
  dkms,
- util-linux,
  debsecan,
  genisoimage,
  csvtool,
