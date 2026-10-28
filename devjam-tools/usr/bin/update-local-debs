@@ -1,0 +1,227 @@
+#!/bin/bash
+# update-local-debs — download and update upstream GitHub .deb releases into a local apt
+# repository (default /srv/local-apt-repository, served by the local-apt-repository package).
+#
+# Per app: missing -> downloaded; older -> replaced. Old debs are deleted (they are public
+# releases, easy to download again); with --keep they are moved to <repo>.superseded instead.
+# Local debs are recognised by their Package field (dpkg-deb -f), not by file name.
+# Downloads are verified against the SHA-256 digest GitHub publishes per release asset;
+# when a release has no digest, the deb is only checked for being a valid deb (warning shown).
+# Run it as yourself: only writing into the repository goes through sudo, when needed.
+
+set -euo pipefail
+
+REPO_DIR="/srv/local-apt-repository"
+KEEP_OLD="no"          # --keep: move old debs to <REPO_DIR>.superseded instead of deleting them
+APPS="all"
+DRY_RUN="no"
+POST_CMD=""
+
+# package | GitHub repo | regex for the amd64 .deb asset | allow pre-releases
+APP_TABLE=(
+    "freetube|FreeTubeApp/FreeTube|^freetube_[0-9][0-9A-Za-z._]*_amd64\\.deb\$|yes"
+    "jan|janhq/jan|^Jan_[0-9][^_]*_amd64\\.deb\$|no"
+    "upscayl|upscayl/upscayl|^upscayl-[0-9][^-]*-linux\\.deb\$|no"
+    "winboat|winboat-org/winboat|^winboat-[0-9][^-]*-amd64\\.deb\$|no"
+    "windows95|felixrieseberg/windows95|^windows95_[0-9][^_]*_amd64\\.deb\$|no"
+)
+ARCH="amd64"   # the asset patterns above are for amd64
+
+ALL_IDS=""
+for row in "${APP_TABLE[@]}"; do ALL_IDS="$ALL_IDS ${row%%|*}"; done
+ALL_IDS="${ALL_IDS# }"
+
+usage() {
+    cat <<EOF
+Usage: ${0##*/} [options]
+
+  -r, --repo DIR        repository folder (default: $REPO_DIR)
+  -a, --apps LIST       "all" or a selection of: $ALL_IDS (default: $APPS)
+  -k, --keep            keep old debs in <repo>.superseded instead of deleting them
+  -n, --dry-run         only report, change nothing
+      --post-cmd CMD    run CMD (via bash -c) after at least one deb was added or replaced
+  -h, --help            this help
+
+GitHub token: \$GITHUB_TOKEN, else 'gh auth token' when the gh CLI is logged in.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -r|--repo)     REPO_DIR="${2:?}"; shift 2 ;;
+        -a|--apps)     APPS="${2:?}"; shift 2 ;;
+        -k|--keep)     KEEP_OLD="yes"; shift ;;
+        -n|--dry-run)  DRY_RUN="yes"; shift ;;
+        --post-cmd)    POST_CMD="${2:?}"; shift 2 ;;
+        -h|--help)     usage; exit 0 ;;
+        *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+REPO_DIR="${REPO_DIR%/}"
+BACKUP_DIR=""; [ "$KEEP_OLD" = "yes" ] && BACKUP_DIR="$REPO_DIR.superseded"
+
+for tool in curl jq dpkg-deb sha256sum; do
+    command -v "$tool" >/dev/null || { echo "Missing tool: $tool" >&2; exit 1; }
+done
+[ -d "$REPO_DIR" ] || { echo "Repository folder not found: $REPO_DIR" >&2; exit 1; }
+
+if [ "$APPS" = "all" ]; then
+    SELECTED="$ALL_IDS"
+else
+    SELECTED=""
+    for id in $APPS; do
+        case " $ALL_IDS " in
+            *" $id "*) SELECTED="$SELECTED $id" ;;
+            *) echo "Unknown app: $id (known: $ALL_IDS)" >&2; exit 2 ;;
+        esac
+    done
+fi
+
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+if [ -z "$GITHUB_TOKEN" ] && command -v gh >/dev/null; then
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+        GITHUB_TOKEN="$(sudo -u "$SUDO_USER" gh auth token 2>/dev/null || true)"
+    else
+        GITHUB_TOKEN="$(gh auth token 2>/dev/null || true)"
+    fi
+fi
+
+# Only writing into the repository / backup folder needs root
+SUDO=()
+if [ "$DRY_RUN" = "no" ] && [ "$(id -u)" -ne 0 ]; then
+    backup_ok="yes"
+    if [ -n "$BACKUP_DIR" ]; then
+        if [ -e "$BACKUP_DIR" ]; then [ -w "$BACKUP_DIR" ] || backup_ok="no"
+        else [ -w "$(dirname "$BACKUP_DIR")" ] || backup_ok="no"; fi
+    fi
+    if [ ! -w "$REPO_DIR" ] || [ "$backup_ok" = "no" ]; then
+        command -v sudo >/dev/null || { echo "No write permission on $REPO_DIR and sudo is not available" >&2; exit 1; }
+        echo "Writing to $REPO_DIR needs root; asking sudo once."
+        sudo -v || { echo "sudo refused; nothing changed" >&2; exit 1; }
+        SUDO=(sudo)
+    fi
+fi
+
+WORKDIR="$(mktemp -d)"
+trap 'rm -rf "$WORKDIR"' EXIT
+
+if [ -t 1 ]; then G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; N=$'\e[0m'; else G=""; Y=""; R=""; N=""; fi
+line() { printf '%-12s %s\n' "$1" "$2"; }
+
+fetch() { # url outfile [extra curl args...]
+    local url="$1" out="$2"; shift 2
+    curl -fsSL --retry 3 --retry-delay 5 --connect-timeout 20 "$@" -o "$out" "$url"
+}
+
+gh_api() { # api-path outfile
+    local args=(-H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+    [ -n "$GITHUB_TOKEN" ] && args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    fetch "https://api.github.com$1" "$2" "${args[@]}"
+}
+
+# Tag -> comparable version: v0.25.3-beta -> 0.25.3
+tag_version() { sed -E 's/^[vV]//; s/[-_.]?(beta|alpha|rc)[0-9]*$//I' <<< "$1"; }
+
+# --- inventory: newest local deb per package, by control field
+declare -A LOCAL_VER=() LOCAL_FILE=()
+while IFS= read -r -d '' deb; do
+    pkg="$(dpkg-deb -f "$deb" Package 2>/dev/null | tr '[:upper:]' '[:lower:]')" || continue
+    case " $SELECTED " in *" $pkg "*) ;; *) continue ;; esac
+    [ "$(dpkg-deb -f "$deb" Architecture)" = "$ARCH" ] || continue
+    ver="$(dpkg-deb -f "$deb" Version)"
+    if [ -z "${LOCAL_VER[$pkg]:-}" ] || dpkg --compare-versions "$ver" gt "${LOCAL_VER[$pkg]}"; then
+        LOCAL_VER[$pkg]="$ver"; LOCAL_FILE[$pkg]="$deb"
+    fi
+done < <(find "$REPO_DIR" -type f -name '*.deb' -print0)
+
+ADDED=0 UPDATED=0 CURRENT=0 FAILED=0
+for row in "${APP_TABLE[@]}"; do
+    IFS='|' read -r pkg repo regex allow_pre <<< "$row"
+    case " $SELECTED " in *" $pkg "*) ;; *) continue ;; esac
+    old_ver="${LOCAL_VER[$pkg]:-}" old_file="${LOCAL_FILE[$pkg]:-}"
+
+    # newest release (not a draft; pre-release only when allowed) that has a matching deb
+    rel="$WORKDIR/$pkg.releases.json"
+    if ! gh_api "/repos/$repo/releases?per_page=20" "$rel"; then
+        line "$pkg" "${R}GitHub API request failed${N}"; FAILED=$((FAILED+1)); continue
+    fi
+    hit="$(jq -r --arg re "$regex" --arg pre "$allow_pre" '
+        [ .[] | select(.draft | not) | select($pre == "yes" or (.prerelease | not))
+              | . as $r | .assets[] | select(.name | test($re))
+              | { tag: $r.tag_name, name, url: .browser_download_url, size, digest: (.digest // "") } ]
+        | first // empty | "\(.tag)\t\(.name)\t\(.url)\t\(.size)\t\(.digest)"' "$rel")"
+    if [ -z "$hit" ]; then
+        line "$pkg" "${R}no matching .deb in the last 20 releases${N}"; FAILED=$((FAILED+1)); continue
+    fi
+    IFS=$'\t' read -r tag asset url size digest <<< "$hit"
+    new_ver="$(tag_version "$tag")"
+
+    if [ -z "$old_ver" ]; then
+        line "$pkg" "${Y}new: $new_ver ($asset, $((size / 1048576)) MB)${N}"
+    elif ! dpkg --compare-versions "$new_ver" gt "$old_ver"; then
+        line "$pkg" "${G}up to date ($old_ver)${N}"; CURRENT=$((CURRENT+1)); continue
+    else
+        line "$pkg" "${Y}update $old_ver -> $new_ver ($asset, $((size / 1048576)) MB)${N}"
+    fi
+    [ "$DRY_RUN" = "yes" ] && continue
+
+    case "$url" in
+        "https://github.com/$repo/releases/download/"*) ;;
+        *) echo "  ${R}unexpected download URL: $url${N}"; FAILED=$((FAILED+1)); continue ;;
+    esac
+    tmp="$WORKDIR/$asset"
+    if ! fetch "$url" "$tmp"; then
+        echo "  ${R}download failed${N}"; FAILED=$((FAILED+1)); continue
+    fi
+    if [[ "$digest" =~ ^sha256:([0-9a-f]{64})$ ]]; then
+        if ! echo "${BASH_REMATCH[1]}  $tmp" | sha256sum -c --quiet - >/dev/null 2>&1; then
+            echo "  ${R}SHA-256 mismatch, not used${N}"; FAILED=$((FAILED+1)); continue
+        fi
+    else
+        echo "  ${Y}note: GitHub publishes no SHA-256 for this asset; only checked that it is a valid deb${N}"
+    fi
+    if ! dpkg-deb --info "$tmp" >/dev/null 2>&1; then
+        echo "  ${R}not a valid deb, not used${N}"; FAILED=$((FAILED+1)); continue
+    fi
+
+    n_pkg="$(dpkg-deb -f "$tmp" Package)"; n_ver="$(dpkg-deb -f "$tmp" Version)"; n_arch="$(dpkg-deb -f "$tmp" Architecture)"
+    if [ "$(tr '[:upper:]' '[:lower:]' <<< "$n_pkg")" != "$pkg" ] || [ "$n_arch" != "$ARCH" ]; then
+        echo "  ${R}deb says $n_pkg $n_ver $n_arch; expected $pkg $ARCH; not used${N}"; FAILED=$((FAILED+1)); continue
+    fi
+    if [ -n "$old_ver" ] && ! dpkg --compare-versions "$n_ver" gt "$old_ver"; then
+        echo "  ${G}deb version $n_ver is not newer than $old_ver; nothing to do${N}"; CURRENT=$((CURRENT+1)); continue
+    fi
+
+    target_dir="$REPO_DIR"; [ -n "$old_file" ] && target_dir="$(dirname "$old_file")"
+    new_file="$target_dir/$(tr '[:upper:]' '[:lower:]' <<< "${n_pkg}_${n_ver}_${n_arch}").deb"
+    if ! "${SUDO[@]}" install -m 0644 "$tmp" "$new_file"; then
+        echo "  ${R}could not write $new_file${N}"; FAILED=$((FAILED+1)); continue
+    fi
+
+    if [ -z "$old_file" ]; then
+        echo "  added: ${new_file##*/}"; ADDED=$((ADDED+1)); continue
+    fi
+    if [ "$old_file" != "$new_file" ]; then
+        if [ -z "$BACKUP_DIR" ]; then
+            "${SUDO[@]}" rm -f -- "$old_file" || { echo "  ${R}could not delete ${old_file##*/}${N}"; FAILED=$((FAILED+1)); continue; }
+            echo "  replaced: ${old_file##*/} -> ${new_file##*/} (old one deleted)"
+        else
+            if ! { "${SUDO[@]}" mkdir -p "$BACKUP_DIR" && "${SUDO[@]}" mv -f -- "$old_file" "$BACKUP_DIR/"; }; then
+                echo "  ${R}new deb added, but could not move ${old_file##*/} to $BACKUP_DIR${N}"; FAILED=$((FAILED+1)); continue
+            fi
+            echo "  replaced: ${old_file##*/} -> ${new_file##*/} (old one in $BACKUP_DIR)"
+        fi
+    fi
+    UPDATED=$((UPDATED+1))
+done
+
+echo
+echo "Added: $ADDED   Updated: $UPDATED   Up to date: $CURRENT   Problems: $FAILED$([ "$DRY_RUN" = "yes" ] && echo '   (dry run)')"
+
+if [ $((ADDED + UPDATED)) -gt 0 ] && [ -n "$POST_CMD" ]; then
+    echo "Running: $POST_CMD"
+    "${SUDO[@]}" bash -c "$POST_CMD"
+fi
+
+[ "$FAILED" -eq 0 ]

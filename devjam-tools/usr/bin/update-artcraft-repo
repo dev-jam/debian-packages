@@ -1,0 +1,271 @@
+#!/bin/bash
+# update-artcraft-repo — check the Craft App Suite / ArtCraft Launcher debs in a local
+# repository against their latest releases and replace outdated debs with the new ones.
+#
+# Packages are recognised by their control fields (dpkg-deb -f), not by file name.
+# Latest versions: ArtCraft API release feed first, GitHub releases as fallback (the same
+# order ArtCraft Launcher uses). Downloads must come from github.com/storytold/<app>/releases
+# and are checked against their published SHA-256 before anything is replaced.
+# New debs are stored as <package>_<version>_<arch>.deb next to the old one.
+# Old debs are deleted (public releases, easy to download again); with --keep they are
+# moved to <repo>.superseded instead.
+
+set -euo pipefail
+
+REPO_DIR="/srv/local-apt-repository"   # watched by the local-apt-repository package
+# Apps that must be in the repository (downloaded when missing): "all", "none" or a list.
+# Craft debs already in the repository are always kept up to date, listed here or not.
+APPS="all"
+KEEP_OLD="no"          # --keep: move old debs to <REPO_DIR>.superseded instead of deleting them
+DRY_RUN="no"
+POST_CMD=""            # e.g. a command that regenerates the repository index
+
+FEED_URL="https://api.storyteller.ai/v1/craft_apps/release_info"
+GITHUB_OWNER="storytold"
+CRAFT_APPS="photocraft vectorcraft filmcraft lightcraft pdfcraft effectcraft designcraft figcraft wordcraft soundcraft deckcraft cadcraft gridcraft"
+
+usage() {
+    cat <<EOF
+Usage: ${0##*/} [options]
+
+  -r, --repo DIR        repository to check (default: $REPO_DIR)
+  -a, --apps LIST       apps to download when missing: "all", "none" or e.g.
+                        "photocraft pdfcraft" (default: $APPS; "all" = the 13 Craft apps,
+                        add artcraft-launcher to the list to include the launcher)
+  -k, --keep            keep old debs in <repo>.superseded instead of deleting them
+  -n, --dry-run         only report, change nothing
+      --post-cmd CMD    run CMD (via bash -c) after at least one deb was replaced,
+                        e.g. to regenerate the repository index
+  -h, --help            this help
+
+GitHub token: \$GITHUB_TOKEN, else 'gh auth token' when the gh CLI is logged in.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -r|--repo)     REPO_DIR="${2:?}"; shift 2 ;;
+        -a|--apps)     APPS="${2:?}"; shift 2 ;;
+        -k|--keep)     KEEP_OLD="yes"; shift ;;
+        -n|--dry-run)  DRY_RUN="yes"; shift ;;
+        --post-cmd)    POST_CMD="${2:?}"; shift 2 ;;
+        -h|--help)     usage; exit 0 ;;
+        *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+REPO_DIR="${REPO_DIR%/}"
+BACKUP_DIR=""; [ "$KEEP_OLD" = "yes" ] && BACKUP_DIR="$REPO_DIR.superseded"
+
+for tool in curl jq dpkg-deb sha256sum; do
+    command -v "$tool" >/dev/null || { echo "Missing tool: $tool" >&2; exit 1; }
+done
+[ -d "$REPO_DIR" ] || { echo "Repository not found: $REPO_DIR" >&2; exit 1; }
+# Run as a normal user: everything happens as you, only writing into the repository (and the
+# backup folder) goes through sudo, and only when you have no write permission there.
+SUDO=()
+if [ "$DRY_RUN" = "no" ] && [ "$(id -u)" -ne 0 ]; then
+    backup_ok="yes"
+    if [ -n "$BACKUP_DIR" ]; then
+        if [ -e "$BACKUP_DIR" ]; then [ -w "$BACKUP_DIR" ] || backup_ok="no"
+        else [ -w "$(dirname "$BACKUP_DIR")" ] || backup_ok="no"; fi
+    fi
+    if [ ! -w "$REPO_DIR" ] || [ "$backup_ok" = "no" ]; then
+        command -v sudo >/dev/null || { echo "No write permission on $REPO_DIR and sudo is not available" >&2; exit 1; }
+        echo "Writing to $REPO_DIR needs root; asking sudo once."
+        sudo -v || { echo "sudo refused; nothing changed" >&2; exit 1; }
+        SUDO=(sudo)
+    fi
+fi
+
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+if [ -z "$GITHUB_TOKEN" ] && command -v gh >/dev/null; then
+    # under sudo, ask the gh login of the calling user, not root's
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+        GITHUB_TOKEN="$(sudo -u "$SUDO_USER" gh auth token 2>/dev/null || true)"
+    else
+        GITHUB_TOKEN="$(gh auth token 2>/dev/null || true)"
+    fi
+fi
+
+case "$APPS" in
+    all)  WANTED="$CRAFT_APPS" ;;
+    none) WANTED="" ;;
+    *)    WANTED=""
+          for id in $APPS; do
+              case " $CRAFT_APPS artcraft-launcher " in
+                  *" $id "*) WANTED="$WANTED $id" ;;
+                  *) echo "Unknown app: $id (known: $CRAFT_APPS artcraft-launcher)" >&2; exit 2 ;;
+              esac
+          done ;;
+esac
+
+WORKDIR="$(mktemp -d)"
+trap 'rm -rf "$WORKDIR"' EXIT
+
+if [ -t 1 ]; then G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; N=$'\e[0m'; else G=""; Y=""; R=""; N=""; fi
+
+fetch() { # url outfile [extra curl args...]
+    local url="$1" out="$2"; shift 2
+    curl -fsSL --retry 3 --retry-delay 5 --connect-timeout 20 "$@" -o "$out" "$url"
+}
+
+gh_api() { # api-path outfile
+    local args=(-H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+    [ -n "$GITHUB_TOKEN" ] && args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    fetch "https://api.github.com$1" "$2" "${args[@]}"
+}
+
+deb_arch_to_asset() {
+    case "$1" in
+        amd64) echo x86_64 ;; arm64) echo aarch64 ;; riscv64) echo riscv64 ;; *) return 1 ;;
+    esac
+}
+
+# Release asset of a .deb: <stem>-<version>-linux-<arch>.deb
+asset_regex() { echo "^$1-[0-9][0-9A-Za-z.+~-]*-linux-$2\\.deb\$"; }
+
+# The version in an asset name: photocraft-0.10.0-linux-x86_64.deb -> 0.10.0
+asset_version() { local n="${1#"$2"-}"; echo "${n%-linux-*}"; }
+
+# Prints "<url> <sha256> <asset-name>" or returns 1.
+resolve_from_feed() { # app-id asset-arch
+    local id="$1" arch="$2" feed="$WORKDIR/feed.json"
+    [ -s "$feed" ] || return 1
+    jq -er --arg id "$id" --arg re "$(asset_regex "$1" "$arch")" \
+           --arg base "https://github.com/$GITHUB_OWNER/$id/releases/download/" '
+        .release_info.apps[$id].latest_release
+        | select(. != null and (.prerelease // false) == false)
+        | .assets[]?
+        | select((.name // "") | test($re))
+        | select((.download_url // "") | startswith($base))
+        | select((.sha256 // "") | test("^[0-9a-f]{64}$"))
+        | "\(.download_url) \(.sha256) \(.name)"' "$feed" 2>/dev/null | head -n1 | grep . || return 1
+}
+
+resolve_from_github() { # repo asset-stem asset-arch
+    local repo="$1" stem="$2" arch="$3"
+    local rel="$WORKDIR/$stem.release.json" sums="$WORKDIR/$stem.SHA256SUMS.txt" name url sums_url sha
+    gh_api "/repos/$repo/releases/latest" "$rel" || return 1
+    name="$(jq -r --arg re "$(asset_regex "$stem" "$arch")" '.assets[] | select(.name | test($re)) | .name' "$rel" | head -n1)"
+    [ -n "$name" ] || return 1
+    url="$(jq -r --arg n "$name" '.assets[] | select(.name == $n) | .browser_download_url' "$rel")"
+    sums_url="$(jq -r '.assets[] | select(.name == "SHA256SUMS.txt") | .browser_download_url' "$rel" | head -n1)"
+    [ -n "$sums_url" ] || return 1
+    fetch "$sums_url" "$sums" || return 1
+    sha="$(awk -v n="$name" '{f=$2; sub(/^\*/, "", f)} f == n {print $1; exit}' "$sums")"
+    [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || return 1
+    echo "$url $sha $name"
+}
+
+# --- feed (one request for all apps)
+if fetch "$FEED_URL" "$WORKDIR/feed.json" 2>/dev/null && jq -e '.success == true' "$WORKDIR/feed.json" >/dev/null 2>&1; then
+    FEED_OK="yes"
+else
+    FEED_OK="no"; rm -f "$WORKDIR/feed.json"
+    echo "${Y}ArtCraft API release feed not available; using GitHub for every app${N}"
+fi
+
+# --- inventory: newest local deb per package+arch, recognised by control fields
+declare -A LOCAL_VER=() LOCAL_FILE=()
+while IFS= read -r -d '' deb; do
+    pkg="$(dpkg-deb -f "$deb" Package 2>/dev/null | tr '[:upper:]' '[:lower:]')" || continue
+    case " $CRAFT_APPS artcraft-launcher printcraft " in *" $pkg "*) ;; *) continue ;; esac
+    ver="$(dpkg-deb -f "$deb" Version)"
+    arch="$(dpkg-deb -f "$deb" Architecture)"
+    key="$pkg|$arch"
+    if [ -z "${LOCAL_VER[$key]:-}" ] || dpkg --compare-versions "$ver" gt "${LOCAL_VER[$key]}"; then
+        LOCAL_VER[$key]="$ver"; LOCAL_FILE[$key]="$deb"
+    fi
+done < <(find "$REPO_DIR" -type f -name '*.deb' -print0)
+
+# --- wanted apps that are not in the repository yet (for this machine's architecture)
+HOST_ARCH="$(dpkg --print-architecture)"
+for id in $WANTED; do
+    key="$id|$HOST_ARCH"
+    [ "$id" = "pdfcraft" ] && [ -n "${LOCAL_VER[printcraft|$HOST_ARCH]:-}" ] && continue
+    if [ -z "${LOCAL_VER[$key]:-}" ]; then LOCAL_VER[$key]="none"; LOCAL_FILE[$key]=""; fi
+done
+
+if [ "${#LOCAL_VER[@]}" -eq 0 ]; then
+    echo "No Craft debs in $REPO_DIR and none requested (--apps none)"; exit 0
+fi
+
+ADDED=0 UPDATED=0 CURRENT=0 FAILED=0
+for key in $(printf '%s\n' "${!LOCAL_VER[@]}" | sort); do
+    pkg="${key%%|*}" arch="${key#*|}"
+    old_ver="${LOCAL_VER[$key]}" old_file="${LOCAL_FILE[$key]}"
+
+    # pdfcraft was called printcraft before; the release stems follow the new name
+    id="$pkg"; [ "$pkg" = "printcraft" ] && id="pdfcraft"
+    if [ "$id" = "artcraft-launcher" ]; then repo="$GITHUB_OWNER/craft-launcher"; else repo="$GITHUB_OWNER/$id"; fi
+
+    if ! asset_arch="$(deb_arch_to_asset "$arch")"; then
+        printf '%-20s %-8s %s\n' "$pkg" "$arch" "${Y}skipped: no release builds for this architecture${N}"; continue
+    fi
+
+    hit=""
+    if [ "$id" != "artcraft-launcher" ] && [ "$FEED_OK" = "yes" ]; then
+        hit="$(resolve_from_feed "$id" "$asset_arch" || true)"
+    fi
+    [ -n "$hit" ] || hit="$(resolve_from_github "$repo" "$id" "$asset_arch" || true)"
+    if [ -z "$hit" ]; then
+        printf '%-20s %-8s %s\n' "$pkg" "$arch" "${R}no release found${N}"; FAILED=$((FAILED+1)); continue
+    fi
+    read -r url sha asset <<< "$hit"
+    new_ver="$(asset_version "$asset" "$id")"
+
+    if [ "$old_ver" = "none" ]; then
+        printf '%-20s %-8s %s\n' "$pkg" "$arch" "${Y}new: $new_ver${N}"
+    elif ! dpkg --compare-versions "$new_ver" gt "$old_ver"; then
+        printf '%-20s %-8s %s\n' "$pkg" "$arch" "${G}up to date ($old_ver)${N}"; CURRENT=$((CURRENT+1)); continue
+    else
+        printf '%-20s %-8s %s\n' "$pkg" "$arch" "${Y}update $old_ver -> $new_ver${N}"
+    fi
+    [ "$DRY_RUN" = "yes" ] && continue
+
+    tmp="$WORKDIR/$asset"
+    if ! fetch "$url" "$tmp"; then
+        echo "  ${R}download failed${N}"; FAILED=$((FAILED+1)); continue
+    fi
+    if ! echo "$sha  $tmp" | sha256sum -c --quiet - >/dev/null 2>&1; then
+        echo "  ${R}SHA-256 mismatch, not replaced${N}"; FAILED=$((FAILED+1)); continue
+    fi
+    # Use the control fields of the new deb itself for its name and as a last sanity check
+    n_pkg="$(dpkg-deb -f "$tmp" Package)"; n_ver="$(dpkg-deb -f "$tmp" Version)"; n_arch="$(dpkg-deb -f "$tmp" Architecture)"
+    if [ "$n_arch" != "$arch" ] || { [ "$old_ver" != "none" ] && ! dpkg --compare-versions "$n_ver" gt "$old_ver"; }; then
+        echo "  ${R}new deb says $n_pkg $n_ver $n_arch; not used${N}"; FAILED=$((FAILED+1)); continue
+    fi
+    if [ "$(echo "$n_pkg" | tr '[:upper:]' '[:lower:]')" != "$pkg" ]; then
+        echo "  ${Y}note: its Package field is '$n_pkg', not '$pkg'; the next run will not recognise it${N}"
+    fi
+    target_dir="$REPO_DIR"; [ -n "$old_file" ] && target_dir="$(dirname "$old_file")"
+    new_file="$target_dir/$(echo "${n_pkg}_${n_ver}_${n_arch}" | tr '[:upper:]' '[:lower:]').deb"
+
+    if ! "${SUDO[@]}" install -m 0644 "$tmp" "$new_file"; then
+        echo "  ${R}could not write $new_file${N}"; FAILED=$((FAILED+1)); continue
+    fi
+    if [ -z "$old_file" ]; then
+        echo "  added: ${new_file##*/}"
+        ADDED=$((ADDED+1)); continue
+    elif [ -z "$BACKUP_DIR" ]; then
+        "${SUDO[@]}" rm -f -- "$old_file"
+        echo "  replaced: ${old_file##*/} -> ${new_file##*/} (old one deleted)"
+    else
+        if ! { "${SUDO[@]}" mkdir -p "$BACKUP_DIR" && "${SUDO[@]}" mv -f -- "$old_file" "$BACKUP_DIR/"; }; then
+            echo "  ${R}new deb added, but could not move ${old_file##*/} to $BACKUP_DIR${N}"; FAILED=$((FAILED+1)); continue
+        fi
+        echo "  replaced: ${old_file##*/} -> ${new_file##*/} (old one in $BACKUP_DIR)"
+    fi
+    UPDATED=$((UPDATED+1))
+done
+
+echo
+echo "Added: $ADDED   Updated: $UPDATED   Up to date: $CURRENT   Problems: $FAILED$([ "$DRY_RUN" = "yes" ] && echo '   (dry run)')"
+
+if [ $((ADDED + UPDATED)) -gt 0 ] && [ -n "$POST_CMD" ]; then
+    echo "Running: $POST_CMD"
+    "${SUDO[@]}" bash -c "$POST_CMD"
+fi
+
+[ "$FAILED" -eq 0 ]
