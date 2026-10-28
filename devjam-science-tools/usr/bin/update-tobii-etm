@@ -1,0 +1,157 @@
+#!/bin/bash
+# update-tobii-etm — download or update Tobii Pro Eye Tracker Manager (.deb) in a local apt
+# repository (default /srv/local-apt-repository, served by the local-apt-repository package).
+#
+# Tobii publishes the Linux deb on S3 as
+#   https://s3.eu-west-1.amazonaws.com/tobiipro.eyetracker.manager/linux/TobiiProEyeTrackerManager-<version>.deb
+# There is no release feed, so the newest version is found by:
+#   1. the bucket listing, when the bucket allows it;
+#   2. otherwise HEAD requests for the next patch, minor and major version, starting at the
+#      local version (or BASELINE), repeated while one exists. A skipped number is not found.
+# Tobii publishes no checksum: the download is checked to be a valid deb with the expected
+# Package, Architecture and a higher Version before it replaces anything.
+# Old debs are deleted (public download); --keep moves them to <repo>.superseded instead.
+# Run it as yourself: only writing into the repository goes through sudo, when needed.
+
+set -euo pipefail
+
+REPO_DIR="/srv/local-apt-repository"
+KEEP_OLD="no"
+DRY_RUN="no"
+
+BUCKET="https://s3.eu-west-1.amazonaws.com/tobiipro.eyetracker.manager"
+PREFIX="linux/TobiiProEyeTrackerManager-"
+PKG="tobiiproeyetrackermanager"
+ARCH="amd64"
+BASELINE="2.7.4"       # start probing here when no local deb exists
+
+usage() {
+    cat <<EOF
+Usage: ${0##*/} [options]
+
+  -r, --repo DIR        repository folder (default: $REPO_DIR)
+  -k, --keep            keep the old deb in <repo>.superseded instead of deleting it
+  -n, --dry-run         only report, change nothing
+  -h, --help            this help
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -r|--repo)     REPO_DIR="${2:?}"; shift 2 ;;
+        -k|--keep)     KEEP_OLD="yes"; shift ;;
+        -n|--dry-run)  DRY_RUN="yes"; shift ;;
+        -h|--help)     usage; exit 0 ;;
+        *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+REPO_DIR="${REPO_DIR%/}"
+BACKUP_DIR=""; [ "$KEEP_OLD" = "yes" ] && BACKUP_DIR="$REPO_DIR.superseded"
+
+for tool in curl dpkg-deb sort; do
+    command -v "$tool" >/dev/null || { echo "Missing tool: $tool" >&2; exit 1; }
+done
+[ -d "$REPO_DIR" ] || { echo "Repository folder not found: $REPO_DIR" >&2; exit 1; }
+
+# Only writing into the repository / backup folder needs root
+SUDO=()
+if [ "$DRY_RUN" = "no" ] && [ "$(id -u)" -ne 0 ]; then
+    backup_ok="yes"
+    if [ -n "$BACKUP_DIR" ]; then
+        if [ -e "$BACKUP_DIR" ]; then [ -w "$BACKUP_DIR" ] || backup_ok="no"
+        else [ -w "$(dirname "$BACKUP_DIR")" ] || backup_ok="no"; fi
+    fi
+    if [ ! -w "$REPO_DIR" ] || [ "$backup_ok" = "no" ]; then
+        command -v sudo >/dev/null || { echo "No write permission on $REPO_DIR and sudo is not available" >&2; exit 1; }
+        echo "Writing to $REPO_DIR needs root; asking sudo once."
+        sudo -v || { echo "sudo refused; nothing changed" >&2; exit 1; }
+        SUDO=(sudo)
+    fi
+fi
+
+WORKDIR="$(mktemp -d)"
+trap 'rm -rf "$WORKDIR"' EXIT
+
+if [ -t 1 ]; then G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; N=$'\e[0m'; else G=""; Y=""; R=""; N=""; fi
+say() { printf '%s %s\n' "$PKG" "$1"; }
+fail() { say "${R}$1${N}"; exit 1; }
+
+exists() { curl -fsSIL --connect-timeout 20 -o /dev/null "$1" >/dev/null 2>&1; }
+size_mb() { curl -fsSIL --connect-timeout 20 "$1" 2>/dev/null | tr -d '\r' \
+            | awk 'tolower($1)=="content-length:" {n=$2} END {print int(n/1048576)}'; }
+
+# --- local version (newest deb with this Package and Architecture)
+old_ver="" old_file=""
+while IFS= read -r -d '' deb; do
+    [ "$(dpkg-deb -f "$deb" Package 2>/dev/null)" = "$PKG" ] || continue
+    [ "$(dpkg-deb -f "$deb" Architecture)" = "$ARCH" ] || continue
+    ver="$(dpkg-deb -f "$deb" Version)"
+    if [ -z "$old_ver" ] || dpkg --compare-versions "$ver" gt "$old_ver"; then
+        old_ver="$ver"; old_file="$deb"
+    fi
+done < <(find "$REPO_DIR" -type f -name '*.deb' -print0)
+
+# --- newest upstream version
+new_ver="" method=""
+list="$WORKDIR/list.xml"
+if curl -fsSL --connect-timeout 20 -o "$list" "$BUCKET/?list-type=2&prefix=${PREFIX%/*}/" 2>/dev/null \
+   && grep -q '<ListBucketResult' "$list"; then
+    method="bucket listing"
+    new_ver="$(grep -o '<Key>[^<]*</Key>' "$list" | sed -E 's#</?Key>##g' \
+               | sed -nE "s#^${PREFIX//./\\.}([0-9][0-9.]*)\\.deb\$#\\1#p" | sort -V | tail -n1)"
+else
+    method="probing versions"
+    v="${old_ver%%-*}"; v="${v#*:}"
+    [ -n "$v" ] || v="$BASELINE"
+    exists "$BUCKET/$PREFIX$v.deb" && new_ver="$v"
+    while true; do
+        IFS=. read -r a b c <<< "$v"; a="${a:-0}" b="${b:-0}" c="${c:-0}"
+        found=""
+        for next in "$a.$b.$((c+1))" "$a.$((b+1)).0" "$((a+1)).0.0"; do
+            if exists "$BUCKET/$PREFIX$next.deb"; then found="$next"; break; fi
+        done
+        [ -n "$found" ] || break
+        v="$found"; new_ver="$found"
+    done
+fi
+[ -n "$new_ver" ] || fail "no ${PREFIX##*/}<version>.deb found in the S3 bucket ($method)"
+url="$BUCKET/$PREFIX$new_ver.deb"
+
+if [ -z "$old_ver" ]; then
+    say "${Y}new: $new_ver ($(size_mb "$url") MB, via $method)${N}"
+elif ! dpkg --compare-versions "$new_ver" gt "$old_ver"; then
+    say "${G}up to date ($old_ver, via $method)${N}"; exit 0
+else
+    say "${Y}update $old_ver -> $new_ver ($(size_mb "$url") MB, via $method)${N}"
+fi
+[ "$DRY_RUN" = "yes" ] && exit 0
+
+# --- download and check
+tmp="$WORKDIR/${url##*/}"
+curl -fsSL --retry 3 --retry-delay 5 --connect-timeout 20 -o "$tmp" "$url" || fail "download failed"
+dpkg-deb --info "$tmp" >/dev/null 2>&1 || fail "not a valid deb, not used"
+echo "  ${Y}note: Tobii publishes no SHA-256; only checked that it is a valid deb${N}"
+n_pkg="$(dpkg-deb -f "$tmp" Package)"; n_ver="$(dpkg-deb -f "$tmp" Version)"; n_arch="$(dpkg-deb -f "$tmp" Architecture)"
+[ "$n_pkg" = "$PKG" ] && [ "$n_arch" = "$ARCH" ] || fail "deb says $n_pkg $n_ver $n_arch; expected $PKG $ARCH; not used"
+if [ -n "$old_ver" ] && ! dpkg --compare-versions "$n_ver" gt "$old_ver"; then
+    say "${G}deb version $n_ver is not newer than $old_ver; nothing to do${N}"; exit 0
+fi
+
+# --- place it, then remove or keep the old one
+target_dir="$REPO_DIR"; [ -n "$old_file" ] && target_dir="$(dirname "$old_file")"
+new_file="$target_dir/${n_pkg}_${n_ver}_${n_arch}.deb"
+"${SUDO[@]}" install -m 0644 "$tmp" "$new_file" || fail "could not write $new_file"
+
+if [ -z "$old_file" ]; then
+    echo "  added: ${new_file##*/}"
+elif [ "$old_file" != "$new_file" ]; then
+    if [ -z "$BACKUP_DIR" ]; then
+        "${SUDO[@]}" rm -f -- "$old_file" || fail "new deb added, but could not delete ${old_file##*/}"
+        echo "  replaced: ${old_file##*/} -> ${new_file##*/} (old one deleted)"
+    else
+        { "${SUDO[@]}" mkdir -p "$BACKUP_DIR" && "${SUDO[@]}" mv -f -- "$old_file" "$BACKUP_DIR/"; } \
+            || fail "new deb added, but could not move ${old_file##*/} to $BACKUP_DIR"
+        echo "  replaced: ${old_file##*/} -> ${new_file##*/} (old one in $BACKUP_DIR)"
+    fi
+fi
