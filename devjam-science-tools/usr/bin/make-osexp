@@ -1,0 +1,86 @@
+#!/bin/sh
+# make-osexp - pack OpenSesame experiment folders into .osexp files.
+#
+# An .osexp with a non-empty file pool is a .tar.gz archive with, at its
+# root (no top-level folder):
+#   script.opensesame   the experiment script
+#   pool/               the file pool
+# See https://osdoc.cogsci.nl/4.1/dev/fileformat
+#
+# Usage: make-osexp FOLDER [FOLDER...]
+# Each FOLDER is packed to FOLDER.osexp next to it (FOLDER-1.osexp,
+# FOLDER-2.osexp, ... if that name is taken), using its contents
+# as archive root.
+
+set -u
+
+notify() {
+    # $1 = error|warning|info, $2 = message
+    if command -v kdialog >/dev/null 2>&1; then
+        case "$1" in
+            error)   kdialog --title "Make OpenSesame experiment" --error "$2" ;;
+            warning) kdialog --title "Make OpenSesame experiment" --sorry "$2" ;;
+            *)       kdialog --title "Make OpenSesame experiment" --passivepopup "$2" 5 ;;
+        esac
+    elif command -v notify-send >/dev/null 2>&1; then
+        notify-send "Make OpenSesame experiment" "$2"
+    else
+        printf '%s: %s\n' "$1" "$2" >&2
+    fi
+}
+
+[ "$#" -gt 0 ] || { notify error "No folder given."; exit 1; }
+
+status=0
+done_list=""
+nl='
+'
+
+for dir in "$@"; do
+    dir=${dir%/}
+
+    if [ ! -d "$dir" ]; then
+        notify error "Not a folder:${nl}$dir"
+        status=1
+        continue
+    fi
+
+    name=$(basename -- "$dir")
+    parent=$(dirname -- "$dir")
+    out="$parent/$name.osexp"
+
+    if [ ! -f "$dir/script.opensesame" ]; then
+        notify warning "Skipped \"$name\": no script.opensesame found in this folder."
+        status=1
+        continue
+    fi
+
+    # Never overwrite: add -1, -2, ... until the name is free.
+    n=0
+    while [ -e "$out" ]; do
+        n=$((n + 1))
+        out="$parent/$name-$n.osexp"
+    done
+
+    # Write to a temp file first, so a failed run never leaves a broken .osexp.
+    tmp=$(mktemp "$parent/.$name.osexp.XXXXXX") || {
+        notify error "Cannot create a file in:${nl}$parent"
+        status=1
+        continue
+    }
+
+    # List top-level entries without a leading "./" so members land at the
+    # archive root as "script.opensesame" and "pool/...".
+    if (cd -- "$dir" && find . -mindepth 1 -maxdepth 1 -printf '%P\0' \
+            | tar --null --files-from=- -czf "$tmp"); then
+        mv -- "$tmp" "$out"
+        done_list="$done_list${nl}$(basename -- "$out")"
+    else
+        rm -f -- "$tmp"
+        notify error "Packing \"$name\" failed."
+        status=1
+    fi
+done
+
+[ -n "$done_list" ] && notify info "Created:$done_list"
+exit "$status"
