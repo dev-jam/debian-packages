@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Service
+MimeType=inode/directory;
+Actions=makeOsexp;
+X-KDE-Priority=TopLevel
+
+[Desktop Action makeOsexp]
+Name=Pack as OpenSesame experiment (.osexp)
+Icon=application-x-compressed-tar
+Exec=make-osexp %F
