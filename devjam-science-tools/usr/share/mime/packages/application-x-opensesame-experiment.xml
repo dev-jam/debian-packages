@@ -2,6 +2,8 @@
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
   <mime-type type="application/x-opensesame-experiment">
     <comment>OpenSesame experiment</comment>
+    <sub-class-of type="application/x-compressed-tar"/>
+    <sub-class-of type="text/plain"/>
     <glob pattern="*.osexp"/>
     <glob pattern="*.opensesame"/>
     <icon name="application-x-opensesame-experiment"/>
