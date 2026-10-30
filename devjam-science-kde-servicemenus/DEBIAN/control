@@ -1,0 +1,9 @@
+Package: devjam-science-kde-servicemenus
+Version: 1.0-1
+Section: kde
+Priority: optional
+Architecture: all
+Depends: devjam-science-tools
+Recommends: dolphin, krusader
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: KDE Service Menu items for science by devjam
