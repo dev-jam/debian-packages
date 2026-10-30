@@ -5,6 +5,11 @@
     <sub-class-of type="application/x-compressed-tar"/>
     <sub-class-of type="text/plain"/>
     <glob pattern="*.osexp"/>
+    <icon name="application-x-opensesame-experiment"/>
+  </mime-type>
+  <mime-type type="application/x-opensesame-script">
+    <comment>OpenSesame script</comment>
+    <sub-class-of type="text/plain"/>
     <glob pattern="*.opensesame"/>
     <icon name="application-x-opensesame-experiment"/>
   </mime-type>

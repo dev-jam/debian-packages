@@ -8,5 +8,5 @@ Icon=opensesame
 Terminal=false
 Categories=Development;IDE;Science;Education;
 StartupNotify=true
-MimeType=application/x-opensesame-experiment
+MimeType=application/x-opensesame-experiment;application/x-opensesame-script;
 
