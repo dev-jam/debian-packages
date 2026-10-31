@@ -4,11 +4,13 @@ Monorepo with the package trees for the custom Debian packages.
 
 Each top-level directory is one binary package: the payload files (laid out as they are installed on the target system) plus a `DEBIAN/` directory with the control metadata. Packages are built with `dpkg-deb`, not with `debuild`/`dpkg-buildpackage`.
 
-Built packages are published in the apt repository [`dev-jam/debian-repo`](https://github.com/dev-jam/debian-repo).
+Built packages are published in the apt repository [`dev-jam/debian`](https://github.com/dev-jam/debian) (served at <https://dev-jam.github.io/debian/>). Installation instructions are in that repository's README.
 
 ---
 
 ## Packages
+
+The packages in the *Science / lab setups* section are published in the `science` component of the apt repository. All other packages are published in the `main` component.
 
 ### Repository & packaging helpers
 
@@ -62,7 +64,7 @@ Built packages are published in the apt repository [`dev-jam/debian-repo`](https
 | `devjam-gpu-x11-xlibre-tearfree-modesetting` | XLibre TearFree configuration (modesetting) |
 | `devjam-gpu-x11-xlibre-tearfree-plasma` | XLibre TearFree configuration (Plasma) |
 | `devjam-gpu-x11-xlibre-tearfree-plasma-egl` | XLibre TearFree configuration (Plasma, EGL) |
-| `devjam-x11-monitor-config` | Display and monitor profile management |
+| `devjam-x11-monitor-config` | X11 monitor configurations (e.g. display size) and a script to switch between them |
 
 ### Applications & desktop integration
 
@@ -72,6 +74,7 @@ Built packages are published in the apt repository [`dev-jam/debian-repo`](https
 | `devjam-mpv-config` | mpv configuration |
 | `devjam-kde-servicemenus` | KDE (Dolphin) service menus |
 | `devjam-thunar-actions` | Thunar custom actions |
+| `devjam-wallpapers` | Desktop wallpapers |
 
 ### Science / lab setups
 
@@ -80,6 +83,9 @@ Built packages are published in the apt repository [`dev-jam/debian-repo`](https
 | `devjam-science-tools` | Tools for experimental lab setups |
 | `devjam-science-experiment-mode-rtirq` | Real-time IRQ tuning for experiment mode |
 | `devjam-science-opensesame-psychopy` | Settings and launch scripts for OpenSesame and PsychoPy |
+| `devjam-science-tools-matlab` | MATLAB (and Psychtoolbox) launchers and KDE service menus |
+| `devjam-science-kde-servicemenus` | KDE service menus for science, e.g. packing OpenSesame experiment folders into `.osexp` |
+| `devjam-science-wallpapers` | CLS wallpapers for normal and experiment mode |
 
 ---
 
