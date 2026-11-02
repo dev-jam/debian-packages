@@ -3,16 +3,7 @@ Version: 1.86-1
 Section: science
 Priority: optional
 Architecture: all
-Depends: inxi,
- hardinfo2,
- fastfetch,
- udev,
- shared-mime-info,
- desktop-file-utils,
- hicolor-icon-theme,
- curl,
- ca-certificates,
- mawk | gawk
+Depends: inxi, hardinfo2, fastfetch, udev, shared-mime-info, desktop-file-utils, hicolor-icon-theme, curl, ca-certificates, mawk | gawk
 Recommends: sudo
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: science tools
