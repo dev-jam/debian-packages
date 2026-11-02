@@ -1,37 +1,10 @@
 Package: devjam-tools
-Version: 1.93-1
+Version: 1.94-1
 Section: utils
 Priority: optional
 Architecture: all
-Depends: curl,
- jq,
- ca-certificates,
- mawk | gawk
-Recommends: sudo,
- gh,
- sox,
- flac,
- wl-clipboard,
- packaging-dev,
- debian-keyring,
- devscripts,
- equivs,
- cfourcc,
- jdupes,
- fclones,
- live-build,
- ffmpeg,
- imagemagick,
- mediainfo,
- mkvtoolnix,
- rsync,
- perl,
- linux-cpupower,
- dkms,
- debsecan,
- genisoimage,
- csvtool,
- libevtx-utils,
- systemd-container
+Depends: curl, jq, ca-certificates, pkexec, python3:any, mawk | gawk
+Recommends: sudo, gh, sox, flac, wl-clipboard, debian-keyring, devscripts, lintian, equivs, cfourcc, jdupes, fclones, live-build, ffmpeg, imagemagick, mediainfo, mkvtoolnix, rsync, perl, linux-cpupower, dkms, debsecan, genisoimage, csvtool, libevtx-utils, systemd-container
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: personal tools for Debian
+Description: Tools for Debian
+ Various tools for Debian
