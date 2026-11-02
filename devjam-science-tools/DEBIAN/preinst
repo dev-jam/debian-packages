@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+# Replace the desktop entry shipped by the tobiiproeyetrackermanager package:
+# its Icon= points to hicolor/0x0, which is not a valid icon theme directory,
+# and it uses a macOS category. The original is diverted to *.distrib, which
+# is not picked up as a desktop entry.
+case "$1" in
+    install|upgrade)
+        dpkg-divert --package devjam-science-tools --add --rename \
+            --divert /usr/share/applications/tobiiproeyetrackermanager.desktop.distrib \
+            /usr/share/applications/tobiiproeyetrackermanager.desktop
+        ;;
+esac
+
+exit 0

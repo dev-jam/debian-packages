@@ -12,4 +12,12 @@ case "$1" in
         ;;
 esac
 
+case "$1" in
+    remove|abort-install|disappear)
+        dpkg-divert --package devjam-science-tools --remove --rename \
+            --divert /usr/share/applications/tobiiproeyetrackermanager.desktop.distrib \
+            /usr/share/applications/tobiiproeyetrackermanager.desktop
+        ;;
+esac
+
 exit 0

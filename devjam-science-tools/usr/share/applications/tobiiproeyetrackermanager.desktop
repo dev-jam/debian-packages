@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=TobiiProEyeTrackerManager
+TryExec=/opt/TobiiProEyeTrackerManager/tobiiproeyetrackermanager
+Exec=/opt/TobiiProEyeTrackerManager/tobiiproeyetrackermanager %U
+Terminal=false
+Type=Application
+Icon=/usr/share/icons/hicolor/0x0/apps/tobiiproeyetrackermanager.png
+StartupWMClass=TobiiProEyeTrackerManager
+Comment=A configuration and setting utility that helps you manage your connected eye trackers. It is available free of charge and greatly increases efficiency for users of Tobii Eyetrackers
+Categories=Science;
