@@ -54,6 +54,13 @@ control_path=""
 # hand-made DEBIAN/md5sums in the tree is left alone and used as-is.
 md5sums_generated=""
 
+# usr/share/doc/<package>/changelog(.Debian).gz is required by Policy 12.7
+# for every package that ships /usr/share/doc/<package>/ (lintian
+# no-changelog). Like md5sums it is generated for the build only and
+# removed again afterwards; a changelog that is already in the tree is
+# left alone and used as-is.
+changelog_generated=""
+
 restore_control() {
     if [ -n "$control_backup" ] && [ -f "$control_backup" ]; then
         cat "$control_backup" > "$control_path"
@@ -64,6 +71,10 @@ restore_control() {
         rm -f "$md5sums_generated"
     fi
     md5sums_generated=""
+    if [ -n "$changelog_generated" ]; then
+        rm -f "$changelog_generated"
+    fi
+    changelog_generated=""
 }
 trap restore_control EXIT
 
@@ -83,6 +94,31 @@ generate_md5sums() {
                   md5sum -- "$file"
               done
     )
+}
+
+# Print the value of a field from an (unfolded) control file
+control_field() {
+    sed -n "s/^$2:[[:space:]]*//p" "$1" | head -n 1
+}
+
+# Print a minimal one-entry Debian changelog for the package in $1. The
+# date is the last git commit that touched the package directory, so the
+# changelog (and the .deb) does not change between rebuilds of the same
+# commit; outside a git checkout the current time is used.
+generate_changelog() {
+    local root="$1" control="$1/DEBIAN/control"
+    local package version maintainer epoch commit
+    package=$(control_field "$control" Package)
+    version=$(control_field "$control" Version)
+    maintainer=$(control_field "$control" Maintainer)
+    epoch=$(git -C "$root" log -1 --format=%ct -- . 2>/dev/null || true)
+    commit=$(git -C "$root" log -1 --format=%h -- . 2>/dev/null || true)
+    [ -n "$epoch" ] || epoch=$(date +%s)
+
+    printf '%s (%s) unstable; urgency=medium\n\n' "$package" "$version"
+    printf '  * Release %s.\n' "$version"
+    [ -n "$commit" ] && printf '  * Built from git commit %s.\n' "$commit"
+    printf '\n -- %s  %s\n' "$maintainer" "$(LC_ALL=C date -R -u -d "@$epoch")"
 }
 
 unfold_control() {
@@ -132,7 +168,25 @@ for dir in "$@"; do
         printf '%s\n' "$unfolded" > "$control_path"
     fi
 
-    # Generate DEBIAN/md5sums for this build only (see generate_md5sums)
+    # Generate the changelog for this build only (see generate_changelog);
+    # only when usr/share/doc/<package>/ exists and has no changelog yet.
+    # A version with a Debian revision (1.2-1) is a non-native package
+    # and gets changelog.Debian.gz, otherwise changelog.gz
+    pkg_name=$(control_field "$control_path" Package)
+    pkg_version=$(control_field "$control_path" Version)
+    doc_dir="$dir_path/usr/share/doc/$pkg_name"
+    if [ -n "$pkg_name" ] && [ -d "$doc_dir" ] && [ ! -L "$doc_dir" ] \
+            && ! compgen -G "$doc_dir/changelog*" >/dev/null; then
+        case "$pkg_version" in
+            *-*) changelog_generated="$doc_dir/changelog.Debian.gz" ;;
+            *)   changelog_generated="$doc_dir/changelog.gz" ;;
+        esac
+        generate_changelog "$dir_path" | gzip -9n > "$changelog_generated"
+        chmod 644 "$changelog_generated"
+    fi
+
+    # Generate DEBIAN/md5sums for this build only (see generate_md5sums);
+    # after the changelog, so the changelog is covered as well
     if [ ! -e "$dir_path/DEBIAN/md5sums" ]; then
         md5sums_generated="$dir_path/DEBIAN/md5sums"
         generate_md5sums "$dir_path" > "$md5sums_generated"
@@ -171,8 +225,13 @@ for dir in "$@"; do
         echo "--- lintian $(basename "$deb_file") ---"
         # lintian exits non-zero when it reports errors; that must not
         # stop the loop under set -e
+        # initial-upload-closes-no-bugs is about Debian ITP bugs and fires
+        # on the generated one-entry changelog of every -1 version; it does
+        # not apply to packages outside the Debian archive
         lintian_rc=0
-        lintian --info --display-info --color=auto "$deb_file" || lintian_rc=$?
+        lintian --info --display-info --color=auto \
+            --suppress-tags initial-upload-closes-no-bugs \
+            "$deb_file" || lintian_rc=$?
         if [ "$lintian_rc" -eq 0 ]; then
             echo "lintian: no errors"
         else
