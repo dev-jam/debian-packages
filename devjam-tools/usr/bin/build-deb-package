@@ -1,29 +1,180 @@
 #!/bin/bash
+# Build .deb packages from the selected directories (each must contain a
+# DEBIAN/ folder) into ../dist/, then check every built package with
+# lintian. Meant to run in a terminal from the Dolphin service menu, but
+# works from a shell too.
 set -euo pipefail
 
 if [ "$#" -eq 0 ]; then
     notify-send -u critical "Debian Build" "No directories selected."
+    echo "No directories selected."
     exit 1
 fi
 
+have_lintian=1
+command -v lintian >/dev/null || have_lintian=0
+
 built_count=0
+failed_count=0
+lintian_issue_count=0
+
+# DEBIAN/control may keep folded (multi-line) fields such as Depends for
+# readability. dpkg-deb copies the file as-is and lintian flags folded
+# fields with multiline-field, so the control file is unfolded for the
+# build only and the original is put back afterwards. Description keeps
+# its continuation lines, as those are part of the field's syntax.
+control_backup=""
+control_path=""
+
+# DEBIAN/md5sums lets debsums verify installed files. It is generated
+# for the build only (like dh_md5sums: conffiles excluded) and removed
+# again afterwards, so it can never go stale in the source tree. A
+# hand-made DEBIAN/md5sums in the tree is left alone and used as-is.
+md5sums_generated=""
+
+restore_control() {
+    if [ -n "$control_backup" ] && [ -f "$control_backup" ]; then
+        cat "$control_backup" > "$control_path"
+        rm -f "$control_backup"
+    fi
+    control_backup=""
+    if [ -n "$md5sums_generated" ]; then
+        rm -f "$md5sums_generated"
+    fi
+    md5sums_generated=""
+}
+trap restore_control EXIT
+
+# Print md5sums lines for every regular file outside DEBIAN/, paths
+# relative to the package root, skipping files listed in DEBIAN/conffiles
+generate_md5sums() {
+    local root="$1"
+    local conffiles="$root/DEBIAN/conffiles"
+    (
+        cd "$root"
+        find . -path ./DEBIAN -prune -o -type f -printf '%P\0' \
+            | LC_ALL=C sort -z \
+            | while IFS= read -r -d '' file; do
+                  if [ -f "$conffiles" ] && grep -qxF "/$file" "$conffiles"; then
+                      continue
+                  fi
+                  md5sum -- "$file"
+              done
+    )
+}
+
+unfold_control() {
+    awk '
+        /^[^ \t]/ {
+            if (line != "") print line
+            line = $0
+            field = $1
+            next
+        }
+        {
+            if (field == "Description:") {
+                print line
+                line = $0
+            } else {
+                sub(/^[ \t]+/, " ")
+                line = line $0
+            }
+        }
+        END { if (line != "") print line }
+    ' "$1"
+}
 
 for dir in "$@"; do
     dir_path="$(realpath "$dir")"
 
-    # Check if the selected directory contains a DEBIAN/ folder
-    if [ -d "$dir_path/DEBIAN" ]; then
-        parent_dir="$(dirname "$dir_path")"
-        dist_dir="$parent_dir/dist"
-
-        mkdir -p "$dist_dir"
-        dpkg-deb --root-owner-group --build "$dir_path" "$dist_dir"
-        built_count=$((built_count + 1))
+    # Only directories that contain a DEBIAN/ folder are package roots
+    if [ ! -d "$dir_path/DEBIAN" ]; then
+        echo "Skipping $dir_path (no DEBIAN/ folder)"
+        echo
+        continue
     fi
+
+    parent_dir="$(dirname "$dir_path")"
+    dist_dir="$parent_dir/dist"
+    mkdir -p "$dist_dir"
+
+    echo "=== Building $(basename "$dir_path") ==="
+
+    # Unfold the control file for this build only (see unfold_control);
+    # cat > keeps the file's own permissions and inode
+    control_path="$dir_path/DEBIAN/control"
+    if [ -f "$control_path" ] && grep -q '^[ \t]' "$control_path"; then
+        control_backup=$(mktemp)
+        cat "$control_path" > "$control_backup"
+        unfolded=$(unfold_control "$control_backup")
+        printf '%s\n' "$unfolded" > "$control_path"
+    fi
+
+    # Generate DEBIAN/md5sums for this build only (see generate_md5sums)
+    if [ ! -e "$dir_path/DEBIAN/md5sums" ]; then
+        md5sums_generated="$dir_path/DEBIAN/md5sums"
+        generate_md5sums "$dir_path" > "$md5sums_generated"
+        chmod 644 "$md5sums_generated"
+        # An empty md5sums (package without files) is pointless; drop it
+        [ -s "$md5sums_generated" ] || { rm -f "$md5sums_generated"; md5sums_generated=""; }
+    fi
+
+    # LC_ALL=C keeps dpkg-deb's message in English, so the output path
+    # can be parsed regardless of the desktop language
+    build_rc=0
+    build_output=$(LC_ALL=C dpkg-deb --root-owner-group --build "$dir_path" "$dist_dir" 2>&1) || build_rc=$?
+    restore_control
+
+    if [ "$build_rc" -ne 0 ]; then
+        echo "$build_output"
+        echo "Build FAILED"
+        echo
+        failed_count=$((failed_count + 1))
+        continue
+    fi
+    echo "$build_output"
+    built_count=$((built_count + 1))
+
+    # dpkg-deb prints: building package 'name' in '/path/to/file.deb'.
+    deb_file=$(sed -n "s/.* in '\(.*\.deb\)'\.$/\1/p" <<< "$build_output")
+
+    if [ "$have_lintian" -eq 0 ]; then
+        echo "lintian not installed, skipping check (sudo apt install lintian)"
+    elif [ -z "$deb_file" ] || [ ! -f "$deb_file" ]; then
+        echo "Could not determine the built .deb, skipping lintian"
+    else
+        echo
+        echo "--- lintian $(basename "$deb_file") ---"
+        # lintian exits non-zero when it reports errors; that must not
+        # stop the loop under set -e
+        lintian_rc=0
+        lintian --info --display-info --color=auto "$deb_file" || lintian_rc=$?
+        if [ "$lintian_rc" -eq 0 ]; then
+            echo "lintian: no errors"
+        else
+            echo "lintian: reported issues (exit code $lintian_rc)"
+            lintian_issue_count=$((lintian_issue_count + 1))
+        fi
+    fi
+    echo
 done
 
-if [ "$built_count" -gt 0 ]; then
-    notify-send -i system-software-install "Debian Build Completed" "$built_count package(s) built in dist/"
+echo "=== Summary ==="
+echo "Built:                $built_count"
+echo "Failed:               $failed_count"
+[ "$have_lintian" -eq 1 ] && echo "With lintian issues:  $lintian_issue_count"
+
+if [ "$built_count" -gt 0 ] && [ "$failed_count" -eq 0 ]; then
+    notify-send -i system-software-install "Debian Build Completed" \
+        "$built_count package(s) built in dist/, $lintian_issue_count with lintian issues"
+elif [ "$built_count" -gt 0 ]; then
+    notify-send -u critical -i dialog-warning "Debian Build" \
+        "$built_count built, $failed_count failed"
+elif [ "$failed_count" -gt 0 ]; then
+    notify-send -u critical -i dialog-error "Debian Build" "$failed_count build(s) failed"
 else
-    notify-send -u critical -i dialog-warning "Debian Build" "No valid package directories (containing a DEBIAN/ folder) found."
+    notify-send -u critical -i dialog-warning "Debian Build" \
+        "No valid package directories (containing a DEBIAN/ folder) found."
 fi
+
+[ "$failed_count" -eq 0 ]
