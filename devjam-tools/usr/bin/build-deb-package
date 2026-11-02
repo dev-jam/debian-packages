@@ -1,9 +1,28 @@
 #!/bin/bash
 # Build .deb packages from the selected directories (each must contain a
 # DEBIAN/ folder) into ../dist/, then check every built package with
-# lintian. Meant to run in a terminal from the Dolphin service menu, but
-# works from a shell too.
+# lintian. Meant to run from the Dolphin service menu, but works from a
+# shell too.
+#
+# Usage: build-deb-package [--no-lintian] DIR...
+#   --no-lintian  build only, skip the lintian check (for the service menu
+#                 entry that runs without a terminal)
 set -euo pipefail
+
+usage() {
+    echo "Usage: $0 [--no-lintian] DIR..."
+}
+
+run_lintian=1
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --no-lintian) run_lintian=0; shift ;;
+        -h|--help)    usage; exit 0 ;;
+        --)           shift; break ;;
+        -*)           echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+        *)            break ;;
+    esac
+done
 
 if [ "$#" -eq 0 ]; then
     notify-send -u critical "Debian Build" "No directories selected."
@@ -11,8 +30,11 @@ if [ "$#" -eq 0 ]; then
     exit 1
 fi
 
-have_lintian=1
-command -v lintian >/dev/null || have_lintian=0
+have_lintian=0
+if [ "$run_lintian" -eq 1 ]; then
+    have_lintian=1
+    command -v lintian >/dev/null || have_lintian=0
+fi
 
 built_count=0
 failed_count=0
@@ -138,7 +160,9 @@ for dir in "$@"; do
     # dpkg-deb prints: building package 'name' in '/path/to/file.deb'.
     deb_file=$(sed -n "s/.* in '\(.*\.deb\)'\.$/\1/p" <<< "$build_output")
 
-    if [ "$have_lintian" -eq 0 ]; then
+    if [ "$run_lintian" -eq 0 ]; then
+        : # lintian check disabled with --no-lintian
+    elif [ "$have_lintian" -eq 0 ]; then
         echo "lintian not installed, skipping check (sudo apt install lintian)"
     elif [ -z "$deb_file" ] || [ ! -f "$deb_file" ]; then
         echo "Could not determine the built .deb, skipping lintian"
@@ -164,9 +188,12 @@ echo "Built:                $built_count"
 echo "Failed:               $failed_count"
 [ "$have_lintian" -eq 1 ] && echo "With lintian issues:  $lintian_issue_count"
 
+lintian_note=""
+[ "$have_lintian" -eq 1 ] && lintian_note=", $lintian_issue_count with lintian issues"
+
 if [ "$built_count" -gt 0 ] && [ "$failed_count" -eq 0 ]; then
     notify-send -i system-software-install "Debian Build Completed" \
-        "$built_count package(s) built in dist/, $lintian_issue_count with lintian issues"
+        "$built_count package(s) built in dist/$lintian_note"
 elif [ "$built_count" -gt 0 ]; then
     notify-send -u critical -i dialog-warning "Debian Build" \
         "$built_count built, $failed_count failed"
