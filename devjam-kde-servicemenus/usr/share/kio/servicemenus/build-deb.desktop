@@ -3,10 +3,15 @@ Type=Service
 ServiceTypes=KonqPopupMenu/Plugin
 Icon=system-software-install
 MimeType=inode/directory;
-Actions=buildDeb;
+Actions=buildDebLintian;buildDeb;
 X-KDE-Priority=TopLevel
+
+[Desktop Action buildDebLintian]
+Name=Build .deb package(s) in dist/ + lintian
+Icon=system-software-install
+Exec=konsole --noclose -e build-deb-package %F
 
 [Desktop Action buildDeb]
 Name=Build .deb package(s) in dist/
 Icon=system-software-install
-Exec=konsole --noclose -p tabtitle="Build .deb" -e build-deb-package %F
+Exec=build-deb-package --no-lintian %F
