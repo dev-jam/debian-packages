@@ -1,7 +1,10 @@
 Package: devjam-science-tools-matlab
-Version: 1.0-1
+Version: 1.0-2
 Section: science
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: matlab tools
+Description: MATLAB launchers and service menus
+ Desktop launchers for MATLAB with and without Psychtoolbox and OpenGL,
+ service menus to run a MATLAB script in the background or as a
+ Psychtoolbox experiment, and the matching command line wrappers.

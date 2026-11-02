@@ -1,8 +1,11 @@
 Package: devjam-gpu-x11-xlibre-tearfree-amdgpu
-Version: 1.5-4
+Version: 1.5-5
 Section: x11
 Priority: optional
 Architecture: all
 Recommends: xlibre, devjam-gpu-x11-xlibre-dmabuf
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: Tearfree improvements to the amdgpu driver
+ X11 device section for the amdgpu driver with TearFree, atomic mode
+ setting and variable refresh enabled and the shadow framebuffer
+ disabled. Atomic mode setting needs XLibre or a patched Xorg.

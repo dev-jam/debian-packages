@@ -1,7 +1,10 @@
 Package: devjam-gpu-mesa-config
-Version: 1.1-4
+Version: 1.1-5
 Section: graphics
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: Mesa optimizations for gl threads, DRI and video decoding/encoding
+ Mesa settings through drirc and environment variables: threaded GL,
+ no-error contexts, Intel compute class, MPEG-4 VA-API and Vulkan video
+ decoding and encoding on the ANV driver.

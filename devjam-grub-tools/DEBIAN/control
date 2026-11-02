@@ -1,7 +1,10 @@
 Package: devjam-grub-tools
-Version: 1.28-1
+Version: 1.28-2
 Section: admin
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: Grub boot items by devjam
+ Extra GRUB menu entries: Rescuezilla, Clonezilla, Super GRUB2 Disk,
+ a hardware info screen, booting ISO images from a boot-isos directory
+ on the local or on any filesystem, and shutdown/reboot.

@@ -1,7 +1,10 @@
 Package: devjam-cpu-powercap
-Version: 1.5-2
+Version: 1.5-3
 Section: admin
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: powercap permissions
+Description: Read access to Intel RAPL energy counters
+ udev rule that makes the Intel RAPL powercap energy_uj attributes
+ readable for the monitoring group, so CPU power use can be shown without
+ root, for example by devjam-conky-system-monitor.

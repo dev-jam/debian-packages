@@ -1,7 +1,9 @@
 Package: devjam-gpu-x11-gtk4-vulkan
-Version: 1.0-4
+Version: 1.0-5
 Section: x11
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: Switch from OpenGL to Vulkan for GTK4.
+Description: Use Vulkan as GTK4 renderer
+ Sets GSK_RENDERER=vulkan in /etc/profile.d, so GTK4 applications render
+ with Vulkan instead of OpenGL.

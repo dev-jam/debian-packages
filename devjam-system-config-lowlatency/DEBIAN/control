@@ -1,8 +1,11 @@
 Package: devjam-system-config-lowlatency
-Version: 1.28-2
+Version: 1.28-3
 Section: admin
 Priority: optional
 Architecture: all
 Recommends: devjam-tools
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: Low latency tools and settings for Debian
+ Real-time limits and memory locking for the audio group, real-time
+ priority and CPU affinity for PipeWire, access to /dev/cpu_dma_latency,
+ and sysctl settings for swappiness and inotify watches.

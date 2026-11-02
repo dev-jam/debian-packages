@@ -1,9 +1,15 @@
 Package: devjam-science-tools
-Version: 1.87-1
+Version: 1.87-2
 Section: science
 Priority: optional
 Architecture: all
 Depends: inxi, hardinfo2, fastfetch, udev, shared-mime-info, desktop-file-utils, hicolor-icon-theme, curl, ca-certificates, mawk | gawk
 Recommends: sudo
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: science tools
+Description: Tools and file types for lab computers
+ Tools for lab computers: print-system-information (hardware and
+ software report), install-psychopy-opensesame, update-psychopy-installer,
+ update-tobii-etm, make-osexp and setup-user-links. It also provides MIME
+ types and icons for OpenSesame and PsychoPy experiments, udev rules for
+ Teensy boards and a fixed desktop entry for Tobii Pro Eye Tracker
+ Manager.

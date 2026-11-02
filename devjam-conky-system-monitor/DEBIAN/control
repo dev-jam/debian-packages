@@ -1,5 +1,5 @@
 Package: devjam-conky-system-monitor
-Version: 1.17-1
+Version: 1.17-2
 Section: utils
 Priority: optional
 Architecture: all
@@ -7,4 +7,8 @@ Depends: x11-xserver-utils
 Recommends: conky-std | conky-all, devjam-cpu-powercap, jq
 Suggests: libkscreen-bin
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: conky theme
+Description: Conky system monitor theme
+ Conky configuration with Lua helper functions that scales with the
+ display, plus a display watcher that restarts Conky when the
+ resolution, refresh rate or scaling factor changes (KScreen or xrandr).
+ The files are installed in /usr/share/devjam/conky.

@@ -1,7 +1,11 @@
 Package: devjam-desktop-kernel-hardening
-Version: 1.0-3
+Version: 1.0-4
 Section: admin
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: Desktop kernel hardening
+Description: Kernel hardening sysctl settings for desktops
+ sysctl settings that harden the kernel without affecting latency: they
+ hide kernel pointers, harden the BPF JIT, restrict perf events,
+ maximise ASLR entropy, limit oops and warning loops, and protect FIFOs
+ and core dumps of setuid programs.

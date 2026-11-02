@@ -1,5 +1,5 @@
 Package: devjam-science-kde-servicemenus
-Version: 1.0-1
+Version: 1.0-2
 Section: kde
 Priority: optional
 Architecture: all
@@ -7,3 +7,5 @@ Depends: devjam-science-tools
 Recommends: dolphin, krusader
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: KDE Service Menu items for science by devjam
+ Dolphin and Krusader service menu that packs a folder as an OpenSesame
+ experiment (.osexp).

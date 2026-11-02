@@ -1,7 +1,12 @@
 Package: devjam-system-config
-Version: 1.23-4
+Version: 1.23-5
 Section: admin
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: Generic configs by devjam
+ General system settings: timestamps in the shell history, default bash
+ aliases and profile for new users, high-quality PipeWire resampling,
+ TRIM/discard for SSDs and LUKS volumes, storage tuning, a shorter stop
+ timeout for systemd user services, and switch-io to choose an I/O
+ scheduler preset.

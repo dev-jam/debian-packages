@@ -1,7 +1,12 @@
 Package: devjam-external-keyring-legacy
-Version: 1.0-3
+Version: 1.0-4
 Section: misc
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: external repo keys for Debian (legacy)
+Description: OpenPGP keys for external apt repositories (legacy)
+ Signing keys of third-party apt repositories, installed in
+ /etc/apt/trusted.gpg.d for Debian Live images that still use
+ sources.list without Signed-By. Use devjam-external-keyring on other
+ systems; this package will be dropped once Debian Live handles
+ deb822 .sources files.
