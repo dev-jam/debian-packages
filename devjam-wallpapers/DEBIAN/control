@@ -1,7 +1,9 @@
 Package: devjam-wallpapers
-Version: 1.0-1
+Version: 1.0-2
 Section: graphics
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: wallpapers
+Description: CLS desktop wallpapers
+ Dark desktop wallpaper with a red sphere above a red grid, in 1920x1080
+ and 3840x2160, installed in /usr/share/wallpapers/cls.

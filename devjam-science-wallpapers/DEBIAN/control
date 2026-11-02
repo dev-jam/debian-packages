@@ -1,7 +1,12 @@
 Package: devjam-science-wallpapers
-Version: 1.0-1
+Version: 1.0-2
 Section: graphics
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: wallpapers
+Description: CLS lab desktop wallpapers for normal and experiment mode
+ Desktop wallpapers for the lab computers that show whether the system
+ runs in normal mode or in experiment mode, with short instructions on
+ where to save research data and how to print system information.
+ Available in 1920x1080 and 3840x2160, installed in
+ /usr/share/wallpapers/cls.

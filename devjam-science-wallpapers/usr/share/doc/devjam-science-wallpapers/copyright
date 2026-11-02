@@ -1,0 +1,24 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: devjam-science-wallpapers
+Source: https://github.com/dev-jam/debian-sources/tree/main/devjam-science-wallpapers
+
+Files: *
+Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>
+License: GPL-3.0-or-later
+
+Files: usr/share/wallpapers/cls/*
+Copyright: unknown
+License: unknown
+Comment: The background image is of unknown origin, see the license text
+ below. The text overlay with the normal/experiment mode instructions is
+ a short local lab instruction added by the maintainer.
+
+License: unknown
+ The background image was found on a wallpaper website; its author and
+ license are unknown, so no license is granted for it here. If you hold
+ the rights to this image, please contact Bob Rosbag
+ <debian@bobrosbag.nl>; it will be credited or removed on request.
+
+License: GPL-3.0-or-later
+ On Debian systems, the full text of the GNU General Public License
+ version 3 can be found in the file /usr/share/common-licenses/GPL-3.
