@@ -1,0 +1,3 @@
+# Built with dpkg-deb, not debhelper: there is no package.maintscript/dh_installdeb,
+# so dpkg-maintscript-helper is called directly as documented in dpkg-maintscript-helper(1).
+devjam-grub-tools: maintainer-script-should-not-use-dpkg-maintscript-helper *

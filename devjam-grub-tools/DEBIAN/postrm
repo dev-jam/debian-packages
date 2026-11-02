@@ -1,4 +1,8 @@
-#!/bin/sh -e
+#!/bin/sh
+set -e
+
+dpkg-maintscript-helper rm_conffile /etc/grub.d/52_rescatux 1.28-1~ -- "$@"
+dpkg-maintscript-helper rm_conffile /etc/grub.d/56_memtest86 1.28-1~ -- "$@"
 
 if [ -e /boot/grub/grub.cfg ] && [ -x "`which update-grub2 2>/dev/null`" ] ; then
 	update-grub2
