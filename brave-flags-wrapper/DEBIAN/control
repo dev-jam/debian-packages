@@ -1,8 +1,7 @@
 Package: brave-flags-wrapper
-Version: 2.2.0-3
+Version: 2.2.0-4
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Depends: bash
 Section: web
 Priority: optional
 Description: Wrapper that applies persistent command-line flags to Brave and Brave Origin
