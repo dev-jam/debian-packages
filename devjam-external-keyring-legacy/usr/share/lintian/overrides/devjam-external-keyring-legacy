@@ -1,0 +1,6 @@
+# Keys for Debian Live images that still use sources.list without Signed-By;
+# this package is dropped once live-build handles deb822 .sources files.
+devjam-external-keyring-legacy: package-installs-apt-keyring [etc/apt/trusted.gpg.d/*]
+# Deliberately not conffiles: a removed or rotated key must disappear from
+# trusted.gpg.d on upgrade/remove instead of lingering as an obsolete conffile.
+devjam-external-keyring-legacy: file-in-etc-not-marked-as-conffile [etc/apt/trusted.gpg.d/*]
