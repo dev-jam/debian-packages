@@ -2,53 +2,52 @@
 set -e
 
 case "$1" in
-	configure)
+    configure)
+        # Reload udev rules and trigger events
+        if command -v udevadm >/dev/null 2>&1; then
+            udevadm control --reload || true
+            udevadm trigger || true
+        fi
+        ;;
+esac
 
-		# Only install or refresh config if missing or template differs
-		if [ ! -f /etc/rtirq.conf ] || ! cmp -s /usr/share/devjam/rtirq/rtirq.conf /etc/rtirq.conf; then
-			cp -a /usr/share/devjam/rtirq/rtirq.conf /etc/rtirq.conf 2>/dev/null || true
-		fi
+# auto-pin-audio.service: enable on first installation and keep the
+# administrator's choice on upgrades, then start or restart it
+# (the snippets dh_installsystemd generates)
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
+    # was-enabled defaults to true, so new installations run enable.
+    if deb-systemd-helper --quiet was-enabled 'auto-pin-audio.service'; then
+        deb-systemd-helper enable 'auto-pin-audio.service' >/dev/null || true
+    else
+        deb-systemd-helper update-state 'auto-pin-audio.service' >/dev/null || true
+    fi
+fi
 
-		# Reload udev rules and trigger events
-		if command -v udevadm >/dev/null 2>&1; then
-			udevadm control --reload || true
-			udevadm trigger || true
-		fi
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+        if [ -n "$2" ]; then
+            _dh_action=restart
+        else
+            _dh_action=start
+        fi
+        deb-systemd-invoke $_dh_action 'auto-pin-audio.service' >/dev/null || true
 
-		if command -v systemctl >/dev/null 2>&1; then
+        # rtirq.service (rtirq package) reads /etc/rtirq.conf; restart it to
+        # apply the lab configuration. deb-systemd-invoke only (re)starts
+        # units that are enabled or running, and honours policy-rc.d.
+        deb-systemd-invoke restart 'rtirq.service' >/dev/null 2>&1 || true
+    fi
+fi
 
-			# Reload systemd daemon
-			systemctl daemon-reload || true
-
-			# Start/Restart rtirq only if enabled
-			if systemctl is-enabled --quiet rtirq.service; then
-				if systemctl is-active --quiet rtirq.service; then
-					systemctl restart rtirq.service || true
-				else
-					systemctl start rtirq.service || true
-				fi
-			fi
-
-			# Fresh install: enable and start auto-pin-audio.
-			# Upgrade: preserve the current enabled/disabled and active/inactive state.
-			if [ -z "$2" ]; then
-				# Fresh install
-				systemctl enable --now auto-pin-audio.service || true
-			else
-				# Upgrade
-				if systemctl is-active --quiet auto-pin-audio.service; then
-					systemctl restart auto-pin-audio.service || true
-				fi
-			fi									
-		fi
-
-		# Update grub experiment mode
-		if command -v update-grub >/dev/null 2>&1; then
-			update-grub-custom-experiment-mode || true
-			update-grub || true
-		fi
-		;;
+case "$1" in
+    configure)
+        # Update grub experiment mode
+        if command -v update-grub >/dev/null 2>&1; then
+            update-grub-custom-experiment-mode || true
+            update-grub || true
+        fi
+        ;;
 esac
 
 exit 0
-

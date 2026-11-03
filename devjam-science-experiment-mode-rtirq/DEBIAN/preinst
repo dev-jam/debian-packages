@@ -1,16 +1,25 @@
 #!/bin/sh
 set -e
 
-case "$1" in
-	install|upgrade)
+# /etc/rtirq.conf is a conffile of the rtirq package, and rtirq reads no
+# other path. To use the lab configuration without modifying rtirq's
+# conffile, it is diverted to /etc/rtirq.conf.rtirq and this package ships
+# /etc/rtirq.conf as a symlink to its own conffile /etc/rtirq.conf.devjam.
 
-		# Backup original config only once
-		if [ ! -f /usr/share/devjam/rtirq/rtirq.conf ]; then
-			if [ -f /etc/rtirq.conf ] && [ ! -f /etc/rtirq.conf.org ]; then
-				mv /etc/rtirq.conf /etc/rtirq.conf.org 2>/dev/null || true
-			fi
-		fi
-		;;
+case "$1" in
+    install|upgrade)
+        # Versions before 1.45-1 moved rtirq's file to /etc/rtirq.conf.org
+        # and copied the lab configuration over /etc/rtirq.conf. Put rtirq's
+        # own file back first, so that it is the one that gets diverted.
+        if [ -n "$2" ] && dpkg --compare-versions "$2" lt 1.45-1~; then
+            if [ -f /etc/rtirq.conf.org ]; then
+                mv -f /etc/rtirq.conf.org /etc/rtirq.conf
+            fi
+        fi
+
+        dpkg-divert --package devjam-science-experiment-mode-rtirq \
+            --add --rename --divert /etc/rtirq.conf.rtirq /etc/rtirq.conf
+        ;;
 esac
 
 exit 0
