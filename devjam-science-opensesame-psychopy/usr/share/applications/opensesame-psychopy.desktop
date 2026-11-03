@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=OpenSesame 4.1 with PsychoPy
-GenericName=Graphical experiment builder for the social sciences
+GenericName=Experiment Builder
 Comment=Graphical experiment builder for the social sciences
 Exec=opensesame-psychopy-launch
 Icon=opensesame
