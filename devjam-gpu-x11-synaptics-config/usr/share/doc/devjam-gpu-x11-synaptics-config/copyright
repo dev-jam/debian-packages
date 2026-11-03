@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: devjam-gpu-x11-synaptics-config
-Source: https://github.com/dev-jam/debian-sources/tree/main/devjam-gpu-x11-synaptics-config
+Source: https://github.com/dev-jam/debian-packages/tree/main/devjam-gpu-x11-synaptics-config
 
 Files: *
 Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>

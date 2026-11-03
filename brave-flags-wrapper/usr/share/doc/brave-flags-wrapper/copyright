@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: brave-flags-wrapper
-Source: https://github.com/dev-jam/debian-sources/tree/main/brave-flags-wrapper
+Source: https://github.com/dev-jam/debian-packages/tree/main/brave-flags-wrapper
 
 Files: *
 Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>

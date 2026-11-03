@@ -1,9 +1,14 @@
 Package: devjam-kde-servicemenus
-Version: 1.37-1
+Version: 1.37-2
 Section: kde
 Priority: optional
 Architecture: all
-Recommends: meld, imagemagick, k4dirstat, kfind, kdialog, kompare, mediainfo, konsole, dolphin, krusader, thunar, pacpl, devjam-tools, fclones, inotify-tools, zstd, genisoimage, kio-admin, mkvtoolnix, ffmpeg, devjam-tools
+Recommends: meld, imagemagick, k4dirstat, kfind, kdialog, kompare, mediainfo, konsole, dolphin, krusader, thunar, pacpl, devjam-tools, fclones, inotify-tools, zstd, genisoimage, kio-admin, mkvtoolnix, ffmpeg
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: KDE Service Menu items collection by devjam
- Service menus for Dolphin
+Description: Dolphin and Krusader service menus by devjam
+ Service menus for Dolphin and Krusader to convert audio and video,
+ compare files and folders (Meld, Kompare, diffoscope, fclones), check
+ FLAC files, show media information, identify images, pack archives, PDFs
+ and DVD ISO images, monitor a folder for activity, open a folder as root
+ or in Konsole, copy paths, and build .deb packages. Most actions call
+ scripts from devjam-tools.

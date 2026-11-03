@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: devjam-grub-theme
-Source: https://github.com/dev-jam/debian-sources/tree/main/devjam-grub-theme
+Source: https://github.com/dev-jam/debian-packages/tree/main/devjam-grub-theme
 
 Files: *
 Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>

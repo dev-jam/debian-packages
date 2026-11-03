@@ -7,5 +7,18 @@ Depends: curl, jq, ca-certificates, pkexec, python3:any, mawk | gawk
 Recommends: sudo, gh, sox, flac, wl-clipboard, debian-keyring, devscripts, lintian, equivs, cfourcc, jdupes, fclones, live-build, ffmpeg, imagemagick, mediainfo, mkvtoolnix, rsync, perl, linux-cpupower, dkms, debsecan, genisoimage, csvtool, libevtx-utils, systemd-container
 Suggests: devjam-s-benchmark
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: Tools for Debian
- Various tools for Debian
+Description: Scripts for packaging, audio and video, files and system upkeep
+ Command line tools by devjam, grouped by task:
+  - packaging and builds: build-deb-package, bpo-build, bpo-build-host,
+    bpo-resume, sbuild-local, appimage2deb, update-local-debs,
+    update-artcraft-repo, nspawn, lb-build
+  - audio and video: aud-convert-codec, aud-convert-channels,
+    vid-convert-codec, vid-convert-container, check-flac, mkvdts2ac3,
+    change-fourcc, alsa-capabilities, audio-monitor
+  - files: duplicate checks with fclones, tar-all-files,
+    copy-quoted-paths, csv2tsv, evtx2xml, extract-microvideo
+  - system: smart-menu, smt-manager, fstrim-all, suspend and compositing
+    toggles, dkms-rebuild, systemd-find-junk, plasma-restart
+ .
+ Many of these are also used by devjam-kde-servicemenus and
+ devjam-thunar-actions.
