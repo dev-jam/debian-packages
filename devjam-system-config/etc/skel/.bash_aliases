@@ -4,10 +4,10 @@
 # aliases
 alias cp='cp -iv'
 alias mv='mv -iv'
-alias rm='rm -iv'
+alias rm='rm -Iv'
 alias la='ls -alh'
 alias mkdir='mkdir -v'
-alias df='df -H'
+alias df='df -h'
 alias du='du -ch'
 alias pbcopy='xsel --clipboard --input'
 alias pbpaste='xsel --clipboard --output'
