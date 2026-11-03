@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!/usr/bin/perl
 
 # smt-manager.pl - a script for managing logical cores
 # Copyright (C) 2015  Steven Barrett

@@ -9,5 +9,4 @@ Terminal=false
 Categories=Development;IDE;Science;Education;
 Keywords=opensesame;psychopy;experiment;psychology;stimulus;timing;realtime;rt;lab;
 StartupNotify=true
-MimeType=application/x-opensesame-experiment;application/x-opensesame-script;
 
