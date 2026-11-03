@@ -1,0 +1,7 @@
+# The suite is a template that s-benchmark-copy copies as a whole to the disk
+# under test; its README, TODO and COPYING belong with it.
+devjam-s-benchmark: package-contains-documentation-outside-usr-share-doc [usr/share/devjam/s-benchmark/*]
+devjam-s-benchmark: extra-license-file [usr/share/devjam/s-benchmark/COPYING]
+
+# Man pages are not written yet; docs/man-pages.md lists which commands need one.
+devjam-s-benchmark: no-manual-page *

@@ -1,0 +1,35 @@
+#!/bin/sh
+# s-benchmark-copy - copy the S benchmark suite to a directory on the disk
+# under test. The suite writes files next to its scripts and uses relative
+# paths, so it cannot run from /usr/share.
+set -e
+
+SRC_DIR="/usr/share/devjam/s-benchmark"
+
+usage() {
+    echo "Usage: $(basename "$0") DIR"
+    echo "Copy the S benchmark suite to DIR/S, on the disk you want to test."
+    echo "See DIR/S/README and DIR/S/USAGE-INSTALLATION for how to run it."
+}
+
+case "${1:-}" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    "")
+        usage >&2
+        exit 1
+        ;;
+esac
+
+dest="$1/S"
+if [ -e "${dest}" ]; then
+    echo "Error: ${dest} already exists." >&2
+    exit 1
+fi
+
+mkdir -p "$1"
+cp -a "${SRC_DIR}" "${dest}"
+echo "S benchmark suite copied to ${dest}"
+echo "Next: read ${dest}/USAGE-INSTALLATION, then run the benchmarks from there."

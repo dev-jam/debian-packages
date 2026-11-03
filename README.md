@@ -26,6 +26,7 @@ The packages in the *Science / lab setups* section are published in the `science
 | Package | Purpose |
 | --- | --- |
 | `devjam-tools` | General scripts and utilities |
+| `devjam-s-benchmark` | S benchmark suite for storage I/O responsiveness, copied to the disk under test with `s-benchmark-copy` |
 | `apt-cleaner` | APT cleanup helper |
 | `fclones-gui-launcher` | Launcher for the fclones GUI |
 | `devjam-pipewire-scripts` | Switch between PipeWire and ALSA-only mode |

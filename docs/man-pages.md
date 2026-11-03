@@ -2,7 +2,8 @@
 
 Debian Policy (section 12.1) says that each program, utility and function
 should have an associated manual page. None of the commands in these
-packages has one yet, so lintian reports `no-manual-page` for 82 commands.
+packages has one yet, so lintian reports `no-manual-page` for 82 commands
+(83 with `s-benchmark-copy`).
 The warning is overridden in each package (`usr/share/lintian/overrides/`)
 until man pages are written; this file records which commands actually need
 one.
@@ -55,6 +56,7 @@ print a usage text, so `help2man` is cheap here.
 | devjam-tools | `update-artcraft-repo` | yes | Update the ArtCraft debs in a local apt repository |
 | devjam-tools | `nspawn` | yes | systemd-nspawn wrapper for live-build and rescue |
 | devjam-tools | `audio-monitor` | yes | Monitor ALSA cards |
+| devjam-s-benchmark | `s-benchmark-copy` | yes | Copy the S benchmark suite to the disk under test |
 | devjam-tools | `smart-menu` | no | Interactive SMART menu for SATA and NVMe disks |
 | devjam-tools | `tar-all-files` | yes | Create tar archives with gz, lz4 or zstd |
 | devjam-tools | `aud-convert-codec`, `aud-convert-channels` | yes | Convert audio files (also used from service menus) |

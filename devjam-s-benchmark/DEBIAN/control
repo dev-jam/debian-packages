@@ -1,0 +1,17 @@
+Package: devjam-s-benchmark
+Version: 2021.01.08-1
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3:any
+Breaks: devjam-tools (<< 1.98-1~)
+Replaces: devjam-tools (<< 1.98-1~)
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: S benchmark suite for storage I/O responsiveness
+ The S benchmark suite by Paolo Valente measures application start-up
+ latency, throughput, fairness and video playback while the disk is under
+ load, for example to compare I/O schedulers.
+ .
+ The suite runs from a writable directory on the disk under test, so it
+ is installed as a template in /usr/share/devjam/s-benchmark;
+ s-benchmark-copy copies it to a directory of choice.
