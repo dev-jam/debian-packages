@@ -1,2 +1,5 @@
 # switch-mpv-config switches mpv profiles; it is not a library *-config script.
 devjam-mpv-config: old-style-config-script [usr/bin/switch-mpv-config]
+
+# Man pages are not written yet; docs/man-pages.md lists which commands need one.
+devjam-mpv-config: no-manual-page *

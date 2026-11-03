@@ -1,0 +1,5 @@
+# The command comes from another package or a separate installation, not from this package.
+devjam-science-opensesame-psychopy: desktop-command-not-in-package *
+
+# Man pages are not written yet; docs/man-pages.md lists which commands need one.
+devjam-science-opensesame-psychopy: no-manual-page *

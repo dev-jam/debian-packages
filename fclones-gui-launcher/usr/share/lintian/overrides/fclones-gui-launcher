@@ -1,0 +1,2 @@
+# The command comes from another package or a separate installation, not from this package.
+fclones-gui-launcher: desktop-command-not-in-package *
