@@ -57,7 +57,7 @@ psychopy_sounddevice,
 psychtoolbox,
 sr-research-pylink,
 seedir,
-titta,
+git+https://github.com/marcus-nystrom/Titta.git,
 tittapy,
 tittaslpy
 "
