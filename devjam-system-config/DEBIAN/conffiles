@@ -1,4 +1,3 @@
 /etc/profile.d/history-timestamp.sh
 /etc/skel/.bash_aliases
-/etc/skel/.bash_profile
 /etc/su-to-rootrc

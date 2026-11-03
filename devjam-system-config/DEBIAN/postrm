@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
+dpkg-maintscript-helper rm_conffile /etc/skel/.bash_profile 1.23-5~ -- "$@"
+
 case "$1" in
 	remove|purge)
 
