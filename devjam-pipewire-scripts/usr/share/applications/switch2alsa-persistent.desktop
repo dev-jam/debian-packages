@@ -7,3 +7,4 @@ Exec=sh -c "switch2alsa-persistent && notify-send -a Audio -i audio-card 'ALSA o
 Icon=audio-card
 StartupNotify=false
 Categories=AudioVideo;Audio;
+Keywords=alsa;pipewire;audio;sound;exclusive;bit-perfect;low latency;persistent;

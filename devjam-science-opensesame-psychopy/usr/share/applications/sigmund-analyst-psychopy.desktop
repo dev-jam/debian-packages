@@ -7,4 +7,5 @@ Exec=sigmund-analyst-psychopy-launch
 Icon=/usr/share/icons/sigmund-analyst.png
 Terminal=false
 Categories=Development;IDE;
+Keywords=sigmund;opensesame;psychopy;python;ai;analysis;statistics;editor;
 StartupNotify=true

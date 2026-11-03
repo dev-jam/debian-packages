@@ -7,6 +7,7 @@ Exec=opensesame-psychopy-launch
 Icon=opensesame
 Terminal=false
 Categories=Development;IDE;Science;Education;
+Keywords=opensesame;psychopy;experiment;psychology;stimulus;timing;lab;
 StartupNotify=true
 MimeType=application/x-opensesame-experiment;application/x-opensesame-script;
 

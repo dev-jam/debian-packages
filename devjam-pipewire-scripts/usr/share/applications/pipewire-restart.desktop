@@ -7,3 +7,4 @@ Exec=sh -c "pipewire-restart && notify-send -a Audio -i view-refresh 'PipeWire r
 Icon=view-refresh
 StartupNotify=false
 Categories=AudioVideo;Audio;
+Keywords=pipewire;wireplumber;pulseaudio;audio;sound;restart;reset;

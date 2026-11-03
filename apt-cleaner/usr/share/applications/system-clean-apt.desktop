@@ -7,3 +7,4 @@ Exec=/usr/bin/system-clean-apt
 Icon=utilities-terminal
 Terminal=true
 Categories=System;Settings;
+Keywords=apt;autoremove;purge;clean;cache;packages;cleanup;disk space;

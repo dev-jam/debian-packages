@@ -7,3 +7,4 @@ Exec=sh -c "switch2pipewire && notify-send -a Audio -i audio-volume-high 'PipeWi
 Icon=audio-volume-high
 StartupNotify=false
 Categories=AudioVideo;Audio;
+Keywords=pipewire;alsa;audio;sound;start;

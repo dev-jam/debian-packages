@@ -185,5 +185,6 @@ Terminal=false
 StartupNotify=true
 Type=Application
 Categories=System;Utility;Core;GTK;FileTools;FileManager;
+Keywords=thunar;root;admin;sudo;pkexec;files;
 
 # vi:set encoding=UTF-8:

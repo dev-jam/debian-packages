@@ -7,6 +7,7 @@ Name=MATLAB (No OpenGL)
 GenericName=Scientific computing environment
 Icon=/usr/share/icons/matlab.png
 Categories=Development;Math;Science
+Keywords=matlab;software opengl;mathworks;
 Comment=Scientific computing environment
 Comment[zh_CN] = 科学计算环境
 StartupNotify=true
