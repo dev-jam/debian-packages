@@ -1,0 +1,2 @@
+# theme.txt is the GRUB theme definition, not documentation.
+devjam-grub-theme: package-contains-documentation-outside-usr-share-doc [boot/grub/themes/debian/theme.txt]
