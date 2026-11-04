@@ -6,9 +6,22 @@
 #                                        with the dev-jam plugins taken from git (default branch HEAD)
 #   install-psychopy-opensesame --help   Show this help
 
+set -e
+
 INSTALL_DIR="/opt/psychopy"
 DEV_VENV_NAME="PsychoPy-dev"
 DEV_GIT_BASE="https://github.com/dev-jam"
+
+# Already root (e.g. a live-build chroot hook): no sudo needed or installed
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
+# User to set up (psychopy group, PATH); empty in a build chroot (env -i),
+# then no user is added and the group has to be assigned elsewhere
+TARGET_USER="${SUDO_USER:-${USER:-}}"
 
 # --- ARGUMENT PARSING ---
 MODE="standard"
@@ -139,19 +152,19 @@ echo ""
 # --- STEP 1: DOWNLOAD / UPDATE INSTALLER ---
 print_banner "[1/${TOTAL_STEPS}] Updating / Installing PsychoPy Linux Installer..."
 echo "Downloading latest version of psychopy_linux_installer to /usr/local/bin..."
-sudo curl --output-dir /usr/local/bin -LO https://github.com/wieluk/psychopy_linux_installer/releases/latest/download/psychopy_linux_installer
+$SUDO curl --fail --retry 3 --output-dir /usr/local/bin -LO https://github.com/wieluk/psychopy_linux_installer/releases/latest/download/psychopy_linux_installer
 
 echo "Setting executable permissions (+x)..."
-sudo chmod +x /usr/local/bin/psychopy_linux_installer
+$SUDO chmod +x /usr/local/bin/psychopy_linux_installer
 
 echo "psychopy_linux_installer update complete."
 
 if [ "$MODE" = "dev" ]; then
     # --- STEP 2 (DEV): INSTALL PSYCHOPY DEV ---
     print_banner "[2/${TOTAL_STEPS}] Installing PsychoPy DEV (dev-jam plugins from git)..."
-    sudo /usr/local/bin/psychopy_linux_installer \
+    $SUDO /usr/local/bin/psychopy_linux_installer \
       --psychopy-version=latest \
-      --target-users="${SUDO_USER:-$USER}" \
+      --target-users="$TARGET_USER" \
       --desktop-shortcuts=none \
       --install-dir="$INSTALL_DIR" \
       --venv-name="$DEV_VENV_NAME" \
@@ -163,9 +176,9 @@ if [ "$MODE" = "dev" ]; then
 else
     # --- STEP 2: INSTALL STANDARD PSYCHOPY ---
     print_banner "[2/${TOTAL_STEPS}] Installing Standard PsychoPy (with additional packages)..."
-    sudo /usr/local/bin/psychopy_linux_installer \
+    $SUDO /usr/local/bin/psychopy_linux_installer \
       --psychopy-version=latest \
-      --target-users="${SUDO_USER:-$USER}" \
+      --target-users="$TARGET_USER" \
       --desktop-shortcuts=none \
       --install-dir="$INSTALL_DIR" \
       --venv-name=PsychoPy \
@@ -177,9 +190,9 @@ else
 
     # --- STEP 3: INSTALL PSYCHOPY STUDIO ---
     print_banner "[3/${TOTAL_STEPS}] Installing PsychoPy Studio (without additional packages)..."
-    sudo /usr/local/bin/psychopy_linux_installer \
+    $SUDO /usr/local/bin/psychopy_linux_installer \
       --studio \
-      --target-users="${SUDO_USER:-$USER}" \
+      --target-users="$TARGET_USER" \
       --desktop-shortcuts=none \
       --install-dir="$INSTALL_DIR" \
       --venv-name=PsychoPy-studio \
