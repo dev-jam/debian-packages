@@ -18,7 +18,8 @@ Description: Scripts for packaging, audio and video, files and system upkeep
   - files: duplicate checks with fclones, tar-all-files,
     copy-quoted-paths, csv2tsv, evtx2xml, extract-microvideo
   - system: smart-menu, smt-manager, fstrim-all, suspend and compositing
-    toggles, dkms-rebuild, systemd-find-junk, plasma-restart
+    toggles, dkms-rebuild, systemd-find-junk, plasma-restart,
+    devjam-run-once
  .
  Many of these are also used by devjam-kde-servicemenus and
  devjam-thunar-actions.

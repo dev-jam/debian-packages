@@ -1,0 +1,23 @@
+#!/bin/sh
+# Usage: devjam-run-once NAME COMMAND [ARG...]
+# Runs COMMAND once per user. After a successful run a marker is stored in
+# ${XDG_STATE_HOME:-~/.local/state}/devjam/run-once/NAME; a failed run is
+# retried at the next call. Delete the marker to run it again.
+
+set -e
+
+if [ "$#" -lt 2 ]; then
+    echo "Usage: ${0##*/} NAME COMMAND [ARG...]" >&2
+    exit 2
+fi
+
+name="$1"
+shift
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/devjam/run-once"
+[ -e "$state_dir/$name" ] && exit 0
+
+"$@"
+
+mkdir -p "$state_dir"
+date '+%Y-%m-%d %H:%M:%S' > "$state_dir/$name"
