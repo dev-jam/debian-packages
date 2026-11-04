@@ -21,7 +21,11 @@ make_link() {
 # -----------------------------------------------------------------------------
 # 1. Symlinks in $HOME
 # -----------------------------------------------------------------------------
-make_link /var/local/ram ram
+# The /var/local/ram RAM disk is gone (use /tmp, a tmpfs on Debian trixie);
+# remove the link to it that earlier versions created
+if [ -L ram ] && [ "$(readlink ram)" = /var/local/ram ]; then
+    rm -f ram
+fi
 make_link /usr/local/share/lab-validation-toolbox lab-validation-toolbox
 
 # -----------------------------------------------------------------------------
