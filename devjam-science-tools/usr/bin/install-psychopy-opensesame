@@ -57,9 +57,9 @@ psychopy_sounddevice,
 psychtoolbox,
 sr-research-pylink,
 seedir,
-git+https://github.com/marcus-nystrom/Titta.git,
+titta,
 tittapy,
-tittaslpy
+tittalslpy
 "
 
 # dev-jam plugins: PyPI release wheels (standard environment)
