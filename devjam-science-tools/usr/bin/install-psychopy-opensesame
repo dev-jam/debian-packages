@@ -40,6 +40,11 @@ for arg in "$@"; do
     esac
 done
 
+# --cleanup (psychopy_linux_installer): after each run remove the uv, pip and
+# Python download caches, the uv tools and the build packages the installer
+# added itself. The venvs and their Python stay. Keeps caches out of a
+# live image when this runs from a live-build hook.
+
 # Packages shared by the standard and the dev environment
 PKGS_COMMON="
 I2MC,
@@ -172,6 +177,7 @@ if [ "$MODE" = "dev" ]; then
       --sudo-mode=auto \
       --log-level=info \
       --non-interactive \
+      --cleanup \
       --additional-packages="$PKGS_DEV_STRING"
 else
     # --- STEP 2: INSTALL STANDARD PSYCHOPY ---
@@ -186,6 +192,7 @@ else
       --sudo-mode=auto \
       --log-level=info \
       --non-interactive \
+      --cleanup \
       --additional-packages="$PKGS_STD_STRING"
 
     # --- STEP 3: INSTALL PSYCHOPY STUDIO ---
@@ -199,7 +206,8 @@ else
       --force-overwrite \
       --sudo-mode=auto \
       --log-level=info \
-      --non-interactive
+      --non-interactive \
+      --cleanup
 fi
 
 print_banner "INSTALLATION SUCCESSFULLY COMPLETED!"
