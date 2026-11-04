@@ -136,7 +136,8 @@ nproc_count=$(nproc)
 # debian/watch exists, try uscan to fetch it before that failure happens.
 pkg_name=$(dpkg-parsechangelog -S Source)
 shopt -s nullglob
-orig_tarballs=(../"${pkg_name}"_*.orig.tar.*)
+upstream_version=$(dpkg-parsechangelog -S Version | sed -e 's/^[0-9]*://' -e 's/-[^-]*$//')
+orig_tarballs=(../"${pkg_name}"_"${upstream_version}".orig.tar.*)
 shopt -u nullglob
 if [ "${#orig_tarballs[@]}" -eq 0 ] && [ -f debian/watch ]; then
     if command -v uscan >/dev/null; then
