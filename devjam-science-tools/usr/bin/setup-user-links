@@ -4,7 +4,7 @@
 TARGET_DIR="Desktop/tools"
 
 # Ensure execution inside the user's home directory
-cd "$HOME"
+cd "$HOME" || exit 1
 
 # Create the target directory
 mkdir -p "$TARGET_DIR"
