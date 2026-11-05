@@ -75,6 +75,7 @@ The packages in the *Science / lab setups* section are published in the `science
 | `brave-flags-wrapper` | Wrapper that applies persistent flags to Brave |
 | `devjam-mpv-config` | mpv configuration |
 | `devjam-kde-servicemenus` | KDE (Dolphin) service menus |
+| `devjam-plasma-defaults` | System-wide KDE Plasma defaults (Dolphin, lock screen, SDDM theme) |
 | `devjam-thunar-actions` | Thunar custom actions |
 | `devjam-wallpapers` | Desktop wallpapers |
 

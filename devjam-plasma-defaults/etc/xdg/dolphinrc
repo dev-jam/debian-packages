@@ -1,0 +1,14 @@
+[General]
+FilterBar=true
+ShowStatusBar=FullWidth
+ShowZoomSlider=true
+
+[KFileDialog Settings]
+Places Icons Auto-resize=false
+Places Icons Static Size=22
+
+[MainWindow]
+MenuBar=Disabled
+
+[PreviewSettings]
+Plugins=appimagethumbnail,evince,audiothumbnail,blenderthumbnail,comicbookthumbnail,cursorthumbnail,org,djvuthumbnail,ebookthumbnail,exrthumbnail,directorythumbnail,fontthumbnail,imagethumbnail,jpegthumbnail,kraorathumbnail,windowsexethumbnail,windowsimagethumbnail,mobithumbnail,opendocumentthumbnail,atril,gsthumbnail,rawthumbnail,svgthumbnail,ffmpegthumbs,webarchivethumbnail,gdk-pixbuf-thumbnailer

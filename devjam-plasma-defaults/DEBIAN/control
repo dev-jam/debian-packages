@@ -1,0 +1,23 @@
+Package: devjam-plasma-defaults
+Version: 1.0-1
+Section: kde
+Priority: optional
+Architecture: all
+Depends: devjam-wallpapers
+Recommends: sddm-theme-breeze
+Enhances: plasma-desktop
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: KDE Plasma defaults by devjam
+ System-wide defaults in /etc/xdg for KDE Plasma and its applications.
+ KConfig reads these before ~/.config, so every user starts with them and
+ can still change each setting:
+ .
+  - Dolphin: filter bar, full-width status bar, zoom slider, no menu bar,
+    preview plugins
+  - single click to open, no Delete command next to Move to Trash
+  - Konsole uses the profile Default.profile when a user has it (the
+    Debian Live image puts it in /etc/skel), KIO confirmations, an
+    empty session at login, region and formats (English with Dutch
+    formats)
+  - lock screen with the CLS wallpaper (devjam-wallpapers)
+  - SDDM theme Breeze (/etc/sddm.conf.d/10-devjam-theme.conf)
