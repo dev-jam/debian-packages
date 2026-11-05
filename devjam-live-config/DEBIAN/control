@@ -1,0 +1,18 @@
+Package: devjam-live-config
+Version: 1.0-1
+Section: admin
+Priority: optional
+Architecture: all
+Depends: live-config
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Debian Live session settings by devjam
+ Settings that only apply to a Debian Live session, through live-config:
+ .
+  - live-config component devjam-no-wallet: no password storage in the
+    live session. KWallet is switched off (no first-use wizard, no Secret
+    Service API) and GNOME Keyring can neither be started by systemd, by
+    D-Bus activation nor by the GNOME/MATE autostart files. Everything is
+    written to the live root, so an installed system keeps KWallet with
+    its first-use wizard.
+  - the groups of the live user (LIVE_USER_DEFAULT_GROUPS), including
+    psychopy, psychtoolbox, dialout and lp for lab hardware.

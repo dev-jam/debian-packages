@@ -1,0 +1,67 @@
+#!/bin/sh
+# live-config component: no password storage in the live session.
+# live-config only runs at a live boot (boot=live); an installed system never
+# runs this, so KWallet stays enabled there, with its first-use wizard.
+#
+# - KWallet off for the live user, no first-use wizard, no Secret Service API
+#   (browsers on Plasma then fall back to their own basic password store)
+# - GNOME Keyring can neither be started by systemd, D-Bus activation nor the
+#   GNOME/MATE autostart files
+# Everything is written to the live root (tmpfs overlay), so nothing persists
+# into the squashfs or an installation.
+
+Init ()
+{
+	if [ -e /var/lib/live/config/devjam-no-wallet ]
+	then
+		exit 0
+	fi
+
+	printf ' devjam-no-wallet'
+}
+
+Config ()
+{
+	mkdir -p /etc/xdg
+
+cat > /etc/xdg/kwalletrc << EOF2
+[Wallet]
+Enabled=false
+First Use=false
+
+[org.freedesktop.secrets]
+apiEnabled=false
+EOF2
+
+	systemctl --global mask gnome-keyring-daemon.service gnome-keyring-daemon.socket > /dev/null 2>&1 || true
+
+	# GNOME Keyring's D-Bus files use Exec= without SystemdService=, so masking
+	# does not stop D-Bus activation; move them out of dbus' sight (*.service)
+	for _NAME in org.freedesktop.secrets org.gnome.keyring org.freedesktop.impl.portal.Secret
+	do
+		_FILE="/usr/share/dbus-1/services/${_NAME}.service"
+
+		if [ -e "${_FILE}" ] && grep -qs gnome-keyring-daemon "${_FILE}"
+		then
+			dpkg-divert --quiet --local --rename --divert "${_FILE}.disabled" --add "${_FILE}"
+		fi
+	done
+
+	# GNOME, MATE: gnome-session starts the daemon from these autostart files
+	# directly. They are conffiles, but this live root is a throwaway overlay.
+	for _FILE in /etc/xdg/autostart/gnome-keyring-pkcs11.desktop \
+		/etc/xdg/autostart/gnome-keyring-secrets.desktop \
+		/etc/xdg/autostart/gnome-keyring-ssh.desktop
+	do
+		if [ -e "${_FILE}" ] && ! grep -qs '^Hidden=true' "${_FILE}"
+		then
+			echo "Hidden=true" >> "${_FILE}"
+		fi
+	done
+
+	# Creating state file
+	touch /var/lib/live/config/devjam-no-wallet
+}
+
+Init
+Config

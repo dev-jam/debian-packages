@@ -41,6 +41,7 @@ The packages in the *Science / lab setups* section are published in the `science
 | `devjam-cpu-powercap` | CPU power cap permission for reading power usage |
 | `devjam-sensors-asus-z790-plus-wifi` | Sensor configuration for the ASUS Z790-PLUS WIFI board |
 | `devjam-live-boot-hooks` | Hooks for live-boot systems |
+| `devjam-live-config` | Debian Live session settings: no wallet/keyring in the live session, groups of the live user |
 | `devjam-conky-system-monitor` | Conky system monitor setup |
 
 ### Boot loader
