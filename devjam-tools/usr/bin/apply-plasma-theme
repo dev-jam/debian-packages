@@ -1,4 +1,4 @@
 #!/bin/sh
 
 #plasma-apply-lookandfeel --apply org.kde.breezetwilight.desktop
-plasma-apply-wallpaperimage /usr/share/wallpapers/cls/cls_1920.jpg
+plasma-apply-wallpaperimage /usr/share/wallpapers/cls/cls_3840.jpg
