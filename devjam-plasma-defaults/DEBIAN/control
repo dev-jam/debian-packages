@@ -21,3 +21,5 @@ Description: KDE Plasma defaults by devjam
     formats)
   - lock screen with the CLS wallpaper (devjam-wallpapers)
   - SDDM theme Breeze (/etc/sddm.conf.d/10-devjam-theme.conf)
+  - SDDM starts the X server with -keeptty, which systemd-logind
+    integration needs (/etc/sddm.conf.d/20-devjam-x11.conf)

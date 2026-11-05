@@ -6,3 +6,4 @@
 /etc/xdg/ksmserverrc
 /etc/xdg/plasma-localerc
 /etc/sddm.conf.d/10-devjam-theme.conf
+/etc/sddm.conf.d/20-devjam-x11.conf
