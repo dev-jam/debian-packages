@@ -1,3 +1,5 @@
 /etc/profile.d/history-timestamp.sh
 /etc/skel/.bash_aliases
 /etc/su-to-rootrc
+/etc/bashrc.d/history.bashrc
+/etc/bashrc.d/hstr.bashrc

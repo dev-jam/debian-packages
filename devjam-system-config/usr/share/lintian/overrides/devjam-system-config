@@ -1,6 +1,6 @@
 # Dotfiles for users created by live-config on Debian Live and for new
-# users on installed systems; .bash_aliases also loads ~/.config/bashrc.d,
-# which Debian Live hooks fill through /etc/skel/.config/bashrc.d.
+# users on installed systems; .bash_aliases also loads /etc/bashrc.d and
+# ~/.config/bashrc.d (bash itself has no system-wide drop-in directory).
 devjam-system-config: package-contains-file-in-etc-skel [etc/skel/.bash_aliases]
 # Built with dpkg-deb, not debhelper: dpkg-maintscript-helper is called directly.
 devjam-system-config: maintainer-script-should-not-use-dpkg-maintscript-helper *

@@ -1,12 +1,15 @@
 Package: devjam-system-config
-Version: 1.23-5
+Version: 1.24-1
 Section: admin
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Recommends: hstr
 Description: Generic configs by devjam
  General system settings: timestamps in the shell history, default bash
- aliases and profile for new users, high-quality PipeWire resampling,
- TRIM/discard for SSDs and LUKS volumes, storage tuning, a shorter stop
- timeout for systemd user services, and switch-io to choose an I/O
- scheduler preset.
+ aliases and profile for new users, bash drop-in snippets in
+ /etc/bashrc.d (history size, hstr on Ctrl-R) loaded through
+ ~/.bash_aliases together with ~/.config/bashrc.d, Geany defaults,
+ high-quality PipeWire resampling, TRIM/discard for SSDs and LUKS
+ volumes, storage tuning, a shorter stop timeout for systemd user
+ services, and switch-io to choose an I/O scheduler preset.

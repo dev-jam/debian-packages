@@ -12,11 +12,19 @@ alias du='du -ch'
 alias pbcopy='xsel --clipboard --input'
 alias pbpaste='xsel --clipboard --output'
 
-# enable bashrc.d directory
-if [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/bashrc.d" ]; then
-    for file in "${XDG_CONFIG_HOME:-$HOME/.config}/bashrc.d/"*.bashrc; do
-        test -f "${file}" || continue
-        . "${file}"
-    done
-    unset file
-fi
+# bash drop-in snippets (*.bashrc), in this order:
+#   1. system-wide: /etc/bashrc.d/
+#   2. per user:    ${XDG_CONFIG_HOME:-~/.config}/bashrc.d/
+# A user snippet with the same file name as a system snippet replaces it;
+# an empty user file of that name disables the system snippet.
+__bashrc_d_user="${XDG_CONFIG_HOME:-$HOME/.config}/bashrc.d"
+for __bashrc_d_file in /etc/bashrc.d/*.bashrc "$__bashrc_d_user"/*.bashrc; do
+    [ -f "$__bashrc_d_file" ] || continue
+    case "$__bashrc_d_file" in
+        /etc/bashrc.d/*)
+            [ -e "$__bashrc_d_user/${__bashrc_d_file##*/}" ] && continue ;;
+    esac
+    # shellcheck source=/dev/null
+    . "$__bashrc_d_file"
+done
+unset __bashrc_d_user __bashrc_d_file

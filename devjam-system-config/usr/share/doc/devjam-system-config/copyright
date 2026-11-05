@@ -6,6 +6,15 @@ Files: *
 Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>
 License: GPL-3.0-or-later
 
+Files: etc/bashrc.d/hstr.bashrc
+Copyright: 2014-2026 Martin Dvorak <martin.dvorak@mindforger.com>
+           2026 Bob Rosbag <debian@bobrosbag.nl>
+Comment: Bash configuration printed by "hstr --show-bash-configuration"
+ (https://github.com/dvorka/hstr), with the history-size lines removed.
+License: Apache-2.0
+ On Debian systems, the complete text of the Apache License 2.0 can be
+ found in "/usr/share/common-licenses/Apache-2.0".
+
 License: GPL-3.0-or-later
  This program is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
