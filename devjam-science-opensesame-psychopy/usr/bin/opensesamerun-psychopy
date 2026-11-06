@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Runs an OpenSesame experiment without the GUI, in the PsychoPy venv.
+# Replacement for opensesamerun, which no longer works in OpenSesame 4.1.
+# Uses run_experiment.py of the Experiment Manager plugin, which accepts the
+# same options: experiment.osexp [--subject=N] [--logfile=FILE] [--fullscreen]
+# Exit codes: 0 = finished, 1 = error, 2 = invalid arguments,
+# 3 = aborted by the user.
+VENV_DIR="/opt/psychopy/PsychoPy/.venv"
+MODULE="opensesame_plugins.experiment_manager.experiment_manager.run_experiment"
+
+if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+    echo "Error: PsychoPy venv not found in $VENV_DIR" >&2
+    echo "       Install it with install-psychopy-opensesame." >&2
+    exit 1
+fi
+
+source "$VENV_DIR/bin/activate"
+
+if ! python -c "import importlib.util, sys; sys.exit(importlib.util.find_spec('$MODULE') is None)" 2>/dev/null; then
+    echo "Error: the Experiment Manager plugin is not installed in $VENV_DIR" >&2
+    echo "       Install opensesame-plugin-experiment_manager (version 4.0.4 or later)." >&2
+    exit 1
+fi
+
+exec python -m "$MODULE" "$@"

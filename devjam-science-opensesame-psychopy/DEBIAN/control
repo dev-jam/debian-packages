@@ -1,5 +1,5 @@
 Package: devjam-science-opensesame-psychopy
-Version: 1.6-2
+Version: 1.7-1
 Section: science
 Priority: optional
 Architecture: all
@@ -10,3 +10,7 @@ Description: OpenSesame Launcher with PsychoPy
  Analyst in the PsychoPy environment in /opt/psychopy, including an
  OpenSesame launcher that runs as a user service with real-time
  priority, and manage-opensesame-affinity to set its CPU affinity.
+ .
+ opensesamerun-psychopy runs an experiment without the GUI, as a
+ replacement for opensesamerun, which no longer works in OpenSesame 4.1.
+ It needs the Experiment Manager plugin in the PsychoPy environment.

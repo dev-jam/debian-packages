@@ -2,8 +2,8 @@
 
 Debian Policy (section 12.1) says that each program, utility and function
 should have an associated manual page. None of the commands in these
-packages has one yet, so lintian reports `no-manual-page` for 82 commands
-(83 with `s-benchmark-copy`).
+packages has one yet, so lintian reports `no-manual-page` for 83 commands
+(84 with `s-benchmark-copy`).
 The warning is overridden in each package (`usr/share/lintian/overrides/`)
 until man pages are written; this file records which commands actually need
 one.
@@ -30,6 +30,7 @@ that change system behaviour. These need a man page most.
 | devjam-science-experiment-mode-rtirq | `usb-affinity` | yes | USB tree with controller IRQs and CPU affinity |
 | devjam-science-experiment-mode-rtirq | `update-grub-custom-experiment-mode` | no | Generate the experiment mode GRUB entries |
 | devjam-science-opensesame-psychopy | `manage-opensesame-affinity` | yes | Set the CPU affinity of OpenSesame |
+| devjam-science-opensesame-psychopy | `opensesamerun-psychopy` | yes | Run an OpenSesame experiment without the GUI |
 | devjam-science-tools | `install-psychopy-opensesame` | yes | Install PsychoPy with OpenSesame |
 | devjam-science-tools | `print-system-information` | no | Hardware and software report |
 | devjam-science-tools | `make-osexp` | yes | Pack a folder as an OpenSesame experiment |
