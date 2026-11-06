@@ -1,0 +1,14 @@
+Package: devjam-gpu-x11-xlibre-modesetting-asyncflip
+Version: 1.0-1
+Section: x11
+Priority: optional
+Architecture: all
+Depends: devjam-gpu-x11-xlibre-modesetting
+Recommends: xlibre
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Async flips on secondary outputs for the modesetting driver
+ X11 OutputClass section that enables AsyncFlipSecondaries in the
+ modesetting driver of XLibre (default: off). With DRI3 page flipping on
+ a multi-display screen only one display is synchronized to vblank;
+ with this option the other displays flip asynchronously and may tear.
+ Mainly useful when the displays mirror or clone each other.

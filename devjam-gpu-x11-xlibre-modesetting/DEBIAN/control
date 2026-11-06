@@ -1,0 +1,12 @@
+Package: devjam-gpu-x11-xlibre-modesetting
+Version: 1.0-1
+Section: x11
+Priority: optional
+Architecture: all
+Recommends: xlibre, devjam-gpu-x11-xlibre-dmabuf
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Use the modesetting driver of XLibre on Intel and AMD GPUs
+ X11 OutputClass section that selects the built-in modesetting driver
+ for GPUs on the i915, xe and amdgpu kernel drivers, instead of the
+ intel or amdgpu DDX. TearFree is enabled by default in the modesetting
+ driver of XLibre.

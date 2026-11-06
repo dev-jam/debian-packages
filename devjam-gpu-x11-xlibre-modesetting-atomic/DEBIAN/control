@@ -1,0 +1,12 @@
+Package: devjam-gpu-x11-xlibre-modesetting-atomic
+Version: 1.0-1
+Section: x11
+Priority: optional
+Architecture: all
+Depends: devjam-gpu-x11-xlibre-modesetting
+Recommends: xlibre
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Atomic mode setting for the modesetting driver of XLibre
+ X11 OutputClass section that enables atomic mode setting in the
+ modesetting driver (default: off). Atomic mode setting needs XLibre or
+ a patched Xorg.
