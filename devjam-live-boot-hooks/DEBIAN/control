@@ -1,5 +1,5 @@
 Package: devjam-live-boot-hooks
-Version: 1.18-4
+Version: 1.19-1
 Section: admin
 Priority: optional
 Architecture: all
@@ -8,5 +8,7 @@ Description: Boot hooks for dev-jam Debian Live images
  Shell hooks for Debian Live images that configure autologin and the
  default session for several desktops (KDE, GNOME, Xfce, Cinnamon, MATE,
  LXQt, LXDE, Budgie, Openbox, Kodi) on X11 or Wayland, switch
- compositing on or off, and set up the XLibre modesetting driver.
+ compositing on or off, and set up the XLibre modesetting driver (with
+ atomic mode setting and async flips on secondary outputs, optionally
+ with variable refresh rate).
  The hooks are installed in /usr/share/devjam/hooks.
