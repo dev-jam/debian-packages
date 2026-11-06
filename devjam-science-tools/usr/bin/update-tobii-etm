@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2022-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # update-tobii-etm — download or update Tobii Pro Eye Tracker Manager (.deb) in a local apt
 # repository (default /srv/local-apt-repository, served by the local-apt-repository package).
 #

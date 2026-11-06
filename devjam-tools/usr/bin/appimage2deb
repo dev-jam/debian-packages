@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Repackage any (type 2) AppImage as a .deb.
 #
 # The AppImage is extracted to /opt/<package> (no FUSE needed at run time) and

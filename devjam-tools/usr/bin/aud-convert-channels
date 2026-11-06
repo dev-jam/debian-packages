@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Convert audio files between mono and stereo using sox.
 # Usage: audio-channel-convert [--stereo|--mono] <audio_file1> [<audio_file2> ...]
 # Default conversion is to stereo if no flag is specified.

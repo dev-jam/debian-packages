@@ -3,7 +3,7 @@ Upstream-Name: devjam-science-wallpapers
 Source: https://github.com/dev-jam/debian-packages/tree/main/devjam-science-wallpapers
 
 Files: *
-Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>
+Copyright: 2026 Bob Rosbag <mail@bobrosbag.nl>
 License: GPL-3.0-or-later
 
 Files: usr/share/wallpapers/cls/*

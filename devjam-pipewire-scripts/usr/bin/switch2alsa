@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2022-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Stop PipeWire until the next logout/reboot and let ALSA clients use the sound card directly.
 
 [ -n "${XDG_RUNTIME_DIR:-}" ] || { echo "XDG_RUNTIME_DIR is not set" >&2; exit 1; }

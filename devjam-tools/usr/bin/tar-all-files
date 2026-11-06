@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Create tar archives with gz, lz4, or zstd compression from files or folders.
 # Usage: tar-all-files [--gz|--lz4|--zstd] <file1_or_folder1> [<file2_or_folder2> ...]
 # Default compression is zstd if no flag is specified.

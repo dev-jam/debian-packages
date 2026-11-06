@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Installed by brave-flags-wrapper. Wraps the original launcher, which
 # dpkg-divert has moved to "<this file>.original". Used for both Brave and
 # Brave Origin.

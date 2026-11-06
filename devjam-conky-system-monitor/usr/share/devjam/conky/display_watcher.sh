@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Detects changes in screen resolution, refresh rate and scaling factor
 # (X11 and Wayland) and restarts only the Conky process.
 #

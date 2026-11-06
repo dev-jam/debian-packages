@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2022-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # make-osexp - pack OpenSesame experiment folders into .osexp files.
 #
 # An .osexp with a non-empty file pool is a .tar.gz archive with, at its

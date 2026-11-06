@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Recompress video files to MP4 (H.264/AAC) or AVI (Xvid/MP3) using ffmpeg.
 # Usage: video-recompress [--mp4|--avi] <video_file1> [<video_file2> ...]
 # Default mode is --mp4 if no flag is specified.

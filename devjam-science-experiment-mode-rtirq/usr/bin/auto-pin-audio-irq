@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Auto-pin audio IRQs (internal + USB) to isolated cores (round-robin)
 # Uses kernel parameter isolcpus for target CPUs
 # Works for Intel, AMD, USB, and any audio IRQs

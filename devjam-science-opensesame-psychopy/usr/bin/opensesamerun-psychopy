@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Runs an OpenSesame experiment without the GUI, in the PsychoPy venv.
 # Replacement for opensesamerun, which no longer works in OpenSesame 4.1.
 # Uses run_experiment.py of the Experiment Manager plugin, which accepts the

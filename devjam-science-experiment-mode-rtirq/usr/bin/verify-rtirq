@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Minimal verification of RTIRQ IRQ pinning
 # Only checks what RTIRQ did on boot
 # Must be run as root for /proc/irq access

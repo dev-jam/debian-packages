@@ -3,7 +3,7 @@ Upstream-Name: devjam-gpu-mesa-config
 Source: https://github.com/dev-jam/debian-packages/tree/main/devjam-gpu-mesa-config
 
 Files: *
-Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>
+Copyright: 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
 License: GPL-3.0-or-later
 
 License: GPL-3.0-or-later

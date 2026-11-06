@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # s-benchmark-copy - copy the S benchmark suite to a directory on the disk
 # under test. The suite writes files next to its scripts and uses relative
 # paths, so it cannot run from /usr/share.

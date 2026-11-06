@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Version 1.2 - Clean systemd-nspawn wrapper for live-build & system rescue
 
 set -euo pipefail

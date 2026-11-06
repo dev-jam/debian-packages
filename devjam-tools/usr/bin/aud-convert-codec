@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Converts selected audio files to FLAC, 320 kbps MP3, or WAV using flags.
 # Usage: audio-convert [--flac|--mp3|--wav] <file1> [<file2> ...]
 # Default mode is --flac if no flag is specified.

@@ -3,7 +3,7 @@ Upstream-Name: devjam-live-boot-hooks
 Source: https://github.com/dev-jam/debian-packages/tree/main/devjam-live-boot-hooks
 
 Files: *
-Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>
+Copyright: 2022-2026 Bob Rosbag <mail@bobrosbag.nl>
 License: GPL-3.0-or-later
 
 License: GPL-3.0-or-later

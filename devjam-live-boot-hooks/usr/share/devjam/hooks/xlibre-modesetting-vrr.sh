@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2022-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 ### XLibre modesetting with variable refresh rate
 # xlibre-modesetting.sh plus the OutputClass section of the

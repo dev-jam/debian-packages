@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Usage: devjam-run-once NAME COMMAND [ARG...]
 # Runs COMMAND once per user. After a successful run a marker is stored in
 # ${XDG_STATE_HOME:-~/.local/state}/devjam/run-once/NAME; a failed run is

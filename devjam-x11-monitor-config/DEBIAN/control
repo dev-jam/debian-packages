@@ -1,5 +1,5 @@
 Package: devjam-x11-monitor-config
-Version: 1.1-4
+Version: 1.1-5
 Section: x11
 Priority: optional
 Architecture: all

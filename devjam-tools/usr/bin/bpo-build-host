@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 # Create deb packages by building directly on the host (no chroot
 # isolation) -- unlike bpo-build, this installs build-deps on the host

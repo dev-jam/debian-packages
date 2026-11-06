@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 if ls /sys/block/sd* 1> /dev/null 2>&1; then
 	for f in /sys/block/sd?/queue/scheduler; do printf "%s is: " "$f"; cat "$f"; done

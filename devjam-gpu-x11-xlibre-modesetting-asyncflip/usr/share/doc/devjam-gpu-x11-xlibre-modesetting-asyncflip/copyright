@@ -3,7 +3,7 @@ Upstream-Name: devjam-gpu-x11-xlibre-modesetting-asyncflip
 Source: https://github.com/dev-jam/debian-packages/tree/main/devjam-gpu-x11-xlibre-modesetting-asyncflip
 
 Files: *
-Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>
+Copyright: 2026 Bob Rosbag <mail@bobrosbag.nl>
 License: GPL-3.0-or-later
 
 License: GPL-3.0-or-later

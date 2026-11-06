@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # update-artcraft-repo — check the Craft App Suite / ArtCraft Launcher debs in a local
 # repository against their latest releases and replace outdated debs with the new ones.
 #

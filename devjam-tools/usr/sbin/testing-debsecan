@@ -1,3 +1,5 @@
 #!/bin/sh
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 apt-get update && apt-get install -t sid $(debsecan --suite sid --format packages --only-fixed)

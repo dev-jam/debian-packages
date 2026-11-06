@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # live-config component: no password storage in the live session.
 # live-config only runs at a live boot (boot=live); an installed system never
 # runs this, so KWallet stays enabled there, with its first-use wizard.

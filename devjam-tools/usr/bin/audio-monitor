@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 # Usage: audio-monitor [-c|--card <num|all>] [-r|--refresh <seconds>] [-v|--verbose]
 #

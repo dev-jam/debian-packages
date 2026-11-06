@@ -1,5 +1,5 @@
 Package: devjam-gpu-x11-xlibre-tearfree-amdgpu
-Version: 1.6-1
+Version: 1.6-2
 Section: oldlibs
 Priority: optional
 Architecture: all

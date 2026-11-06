@@ -1,5 +1,5 @@
 Package: devjam-gpu-x11-xlibre-tearfree-modesetting
-Version: 1.7-1
+Version: 1.7-2
 Section: oldlibs
 Priority: optional
 Architecture: all

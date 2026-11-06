@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 set -euo pipefail
 
 # Prevent running script directly as root (but allow internal sudo re-exec)

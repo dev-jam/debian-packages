@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Build .deb packages from the selected directories (each must contain a
 # DEBIAN/ folder) into ../dist/, then check every built package with
 # lintian. Meant to run from the Dolphin service menu, but works from a

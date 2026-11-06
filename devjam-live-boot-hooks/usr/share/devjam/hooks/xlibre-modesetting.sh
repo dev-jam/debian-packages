@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2022-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 ### XLibre modesetting
 # Same OutputClass sections as the devjam-gpu-x11-xlibre-modesetting,

@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2021-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Remux video files to MKV or MP4 format without re-encoding.
 # Usage: to-video-container [--mkv|--mp4] <video_file1> [<video_file2> ...]
 # Default output container is MKV (using mkvmerge) if no flag is specified.

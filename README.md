@@ -134,4 +134,8 @@ lintian <package>.deb              # policy checks
 
 ## License
 
-See the individual `copyright` file of each package.
+Copyright (C) 2021-2026 Bob Rosbag
+
+Unless stated otherwise in the `copyright` file of a package, the packages in this repository are licensed under the GNU General Public License version 3 or (at your option) any later version (GPL-3.0-or-later). The full license text is in [`LICENSE`](LICENSE).
+
+Some packages also contain files from others under their own license (for example Apache-2.0, GPL-2.0-only or GPL-2.0-or-later). The `copyright` file of each package lists the copyright and license per file.

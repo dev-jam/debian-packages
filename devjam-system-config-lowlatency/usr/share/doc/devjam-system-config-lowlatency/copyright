@@ -3,7 +3,7 @@ Upstream-Name: devjam-system-config-lowlatency
 Source: https://github.com/dev-jam/debian-packages/tree/main/devjam-system-config-lowlatency
 
 Files: *
-Copyright: 2026 Bob Rosbag <debian@bobrosbag.nl>
+Copyright: 2024-2026 Bob Rosbag <mail@bobrosbag.nl>
 License: GPL-3.0-or-later
 
 License: GPL-3.0-or-later
