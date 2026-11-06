@@ -1,0 +1,2 @@
+# Built with dpkg-deb, not debhelper: dpkg-maintscript-helper is called directly.
+devjam-gpu-x11-xlibre-tearfree-amdgpu: maintainer-script-should-not-use-dpkg-maintscript-helper *
