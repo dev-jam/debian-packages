@@ -11,6 +11,15 @@
 #   cd path/to/package-with-debian-folder
 #   sbuild-local [--dist=SUITE] [--nocheck | --nocheck-profile]
 #                [--allow-unstable=PKG[,PKG...]] [--extra-package-dir=DIR]
+#                [--output-dir=DIR]
+#
+# Output: by default everything lands next to the source tree (../), like
+# dpkg-buildpackage. With --output-dir=DIR (or SBUILD_LOCAL_OUTPUT_DIR=DIR
+# in the environment) the build artifacts (.deb, .changes, .buildinfo,
+# build log) go to DIR, and after a successful build the source package
+# files of this version (.dsc, .debian.tar.*, .orig.tar.*) are moved from
+# ../ to DIR as well. The orig tarball has to sit in ../ during the build:
+# dpkg-source looks for it next to the source tree.
 #
 # Requires in ~/.sbuildrc (same as build-bpo):
 #   $chroot_mode = 'unshare';
@@ -76,8 +85,12 @@ ALLOW_UNSTABLE=""
 # e.g. a locally-built dependency you don't want to publish anywhere.
 EXTRA_PACKAGE_DIR=""
 
+# Directory for the build artifacts and, after the build, the source
+# package files; empty = the parent of the source tree (see above).
+OUTPUT_DIR="${SBUILD_LOCAL_OUTPUT_DIR:-}"
+
 usage() {
-    echo "Usage: $0 [--dist=SUITE] [--nocheck | --nocheck-profile] [--allow-unstable=PKG[,PKG...]] [--extra-package-dir=DIR]"
+    echo "Usage: $0 [--dist=SUITE] [--nocheck | --nocheck-profile] [--allow-unstable=PKG[,PKG...]] [--extra-package-dir=DIR] [--output-dir=DIR]"
 }
 
 command -v sbuild >/dev/null || { echo "Error: sbuild not installed" >&2; exit 1; }
@@ -107,6 +120,10 @@ while [[ $# -gt 0 ]]; do
             EXTRA_PACKAGE_DIR="${1#*=}"
             shift
             ;;
+        --output-dir=*)
+            OUTPUT_DIR="${1#*=}"
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -128,6 +145,14 @@ src_dir="$PWD"
 # Match dpkg-buildpackage's own convention: output lands one directory
 # above the source tree, not inside it.
 build_dir="$(dirname "$src_dir")"
+# Where sbuild writes the artifacts: the parent of the source tree, or
+# --output-dir (made absolute: sbuild runs from another directory)
+if [ -n "$OUTPUT_DIR" ]; then
+    mkdir -p "$OUTPUT_DIR"
+    out_dir="$(cd "$OUTPUT_DIR" && pwd)"
+else
+    out_dir="$build_dir"
+fi
 nproc_count=$(nproc)
 
 # Quilt-format (3.0 (quilt), the common case) source trees need the
@@ -150,7 +175,7 @@ if [ "${#orig_tarballs[@]}" -eq 0 ] && [ -f debian/watch ]; then
     fi
 fi
 
-sbuild_args=(-d "$DIST" -j"$nproc_count" --build-dir="$build_dir")
+sbuild_args=(-d "$DIST" -j"$nproc_count" --build-dir="$out_dir")
 
 # Skip the test suite; add the profile only on explicit request
 if [ "$NOCHECK" -ge 1 ]; then
@@ -227,7 +252,7 @@ fi
 
 echo "Source:    $src_dir"
 echo "Dist:      $DIST"
-echo "Build-dir: $build_dir"
+echo "Build-dir: $out_dir"
 case "$NOCHECK" in
     1) echo "Nocheck:   tests skipped (DEB_BUILD_OPTIONS=$DEB_BUILD_OPTIONS), all build-deps installed" ;;
     2) echo "Nocheck:   tests skipped (DEB_BUILD_OPTIONS=$DEB_BUILD_OPTIONS) + nocheck profile (<!nocheck> build-deps dropped)" ;;
@@ -236,3 +261,21 @@ esac
 [ -n "$EXTRA_PACKAGE_DIR" ] && echo "Extra packages from: $EXTRA_PACKAGE_DIR (${#extra_debs[@]} .deb found)"
 
 sbuild "${sbuild_args[@]}" .
+
+# With --output-dir: also move the source package files of this version
+# (dpkg-source writes them next to the source tree) to the output dir, so
+# that everything of one build is in one place
+if [ "$out_dir" != "$build_dir" ]; then
+    full_version=$(dpkg-parsechangelog -S Version | sed -e 's/^[0-9]*://')
+    shopt -s nullglob
+    src_files=("$build_dir/${pkg_name}_${full_version}".dsc
+               "$build_dir/${pkg_name}_${full_version}".debian.tar.*
+               "$build_dir/${pkg_name}_${full_version}"_source.*
+               "$build_dir/${pkg_name}_${upstream_version}".orig.tar.*)
+    shopt -u nullglob
+    if [ "${#src_files[@]}" -gt 0 ]; then
+        mv -f -- "${src_files[@]}" "$out_dir"/
+        echo "Moved to $out_dir:"
+        printf '    %s\n' "${src_files[@]##*/}"
+    fi
+fi
