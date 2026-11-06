@@ -62,8 +62,12 @@ The packages in the *Science / lab setups* section are published in the `science
 | `devjam-gpu-x11-gtk4-vulkan` | X11 / GTK4 / Vulkan settings |
 | `devjam-gpu-x11-synaptics-config` | X11 Synaptics touchpad configuration |
 | `devjam-gpu-x11-xlibre-dmabuf` | DMA-BUF support for the XLibre server |
-| `devjam-gpu-x11-xlibre-tearfree-amdgpu` | XLibre TearFree configuration (amdgpu) |
-| `devjam-gpu-x11-xlibre-tearfree-modesetting` | XLibre TearFree configuration (modesetting) |
+| `devjam-gpu-x11-xlibre-modesetting` | Use the XLibre modesetting driver on Intel and AMD GPUs (TearFree is on by default) |
+| `devjam-gpu-x11-xlibre-modesetting-atomic` | Atomic mode setting for the modesetting driver |
+| `devjam-gpu-x11-xlibre-modesetting-vrr` | Variable refresh rate for the modesetting driver (not for lab timing) |
+| `devjam-gpu-x11-xlibre-modesetting-asyncflip` | Async flips on secondary outputs for the modesetting driver |
+| `devjam-gpu-x11-xlibre-tearfree-amdgpu` | Transitional package, replaced by `devjam-gpu-x11-xlibre-modesetting` |
+| `devjam-gpu-x11-xlibre-tearfree-modesetting` | Transitional package, replaced by `devjam-gpu-x11-xlibre-modesetting` |
 | `devjam-gpu-x11-xlibre-tearfree-plasma` | XLibre TearFree configuration (Plasma) |
 | `devjam-gpu-x11-xlibre-tearfree-plasma-egl` | XLibre TearFree configuration (Plasma, EGL) |
 | `devjam-x11-monitor-config` | X11 monitor configurations (e.g. display size) and a script to switch between them |

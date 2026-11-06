@@ -1,5 +1,5 @@
 Package: devjam-gpu-x11-xlibre-dmabuf
-Version: 1.0-2
+Version: 1.0-3
 Section: x11
 Priority: optional
 Architecture: all
@@ -8,5 +8,5 @@ Breaks: devjam-gpu-x11-xlibre-tearfree-amdgpu (<< 1.5-4), devjam-gpu-x11-xlibre-
 Replaces: devjam-gpu-x11-xlibre-tearfree-amdgpu (<< 1.5-4), devjam-gpu-x11-xlibre-tearfree-modesetting (<< 1.6-4)
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: DMA-BUF support for the XLibre server
- Enables DMA-BUF support in the XLibre server. Recommended by the XLibre
- tearfree configuration packages for amdgpu and modesetting.
+ Enables DMA-BUF support in the XLibre server. Recommended by the
+ modesetting configuration package devjam-gpu-x11-xlibre-modesetting.
