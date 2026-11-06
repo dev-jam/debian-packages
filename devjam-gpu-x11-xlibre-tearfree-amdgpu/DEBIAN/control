@@ -1,11 +1,15 @@
 Package: devjam-gpu-x11-xlibre-tearfree-amdgpu
-Version: 1.5-5
-Section: x11
+Version: 1.6-1
+Section: oldlibs
 Priority: optional
 Architecture: all
-Recommends: xlibre, devjam-gpu-x11-xlibre-dmabuf
+Depends: devjam-gpu-x11-xlibre-modesetting, devjam-gpu-x11-xlibre-modesetting-atomic
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: Tearfree improvements to the amdgpu driver
- X11 device section for the amdgpu driver with TearFree, atomic mode
- setting and variable refresh enabled and the shadow framebuffer
- disabled. Atomic mode setting needs XLibre or a patched Xorg.
+Description: Transitional package for devjam-gpu-x11-xlibre-modesetting
+ This package removes the old X11 device section
+ /etc/X11/xorg.conf.d/20-amdgpu.conf and pulls in
+ devjam-gpu-x11-xlibre-modesetting and
+ devjam-gpu-x11-xlibre-modesetting-atomic. The GPU now uses the
+ modesetting driver instead of the amdgpu DDX, and variable refresh rate
+ is no longer enabled; install devjam-gpu-x11-xlibre-modesetting-vrr for
+ it. It can be removed safely.
