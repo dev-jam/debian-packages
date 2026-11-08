@@ -1,5 +1,5 @@
 Package: devjam-gpu-intel-config
-Version: 1.0-11
+Version: 1.1-1
 Section: graphics
 Priority: optional
 Architecture: all
