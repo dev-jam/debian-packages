@@ -134,6 +134,35 @@ gh_api() { # api-path outfile
     fetch "https://api.github.com$1" "$2" "${args[@]}"
 }
 
+# Download a release asset. First the normal download URL
+# (https://github.com/<owner>/<repo>/releases/download/<tag>/<name>); when that
+# fails, the same asset through the API (releases/assets/<id> with
+# Accept: application/octet-stream), the route 'gh release download' uses. On
+# 2026-11-08 github.com answered 504 for storytold download URLs while the API
+# route worked. curl does not send the Authorization header on to the storage
+# host it is redirected to (a different host), so the token stays with GitHub.
+fetch_asset() { # url outfile [note]  (note: say on stderr when the API route was used)
+    local url="$1" out="$2" note="${3:-}" first_err path owner repo tag name rel id
+    fetch "$url" "$out" && return 0
+    first_err="$(fetch_error)"
+    path="${url#https://github.com/}"
+    if ! [[ "$url" == https://github.com/* && "$path" =~ ^([^/]+)/([^/]+)/releases/download/([^/]+)/([^/]+)$ ]]; then
+        return 1
+    fi
+    owner="${BASH_REMATCH[1]}" repo="${BASH_REMATCH[2]}" tag="${BASH_REMATCH[3]}" name="${BASH_REMATCH[4]}"
+    rel="$WORKDIR/$repo.$tag.tag.json"
+    [ -s "$rel" ] || gh_api "/repos/$owner/$repo/releases/tags/$tag" "$rel" \
+        || { echo "$first_err; API: $(fetch_error)" >"$WORKDIR/fetch.err"; return 1; }
+    id="$(jq -r --arg n "$name" '.assets[] | select(.name == $n) | .id' "$rel" | head -n1)"
+    [[ "$id" =~ ^[0-9]+$ ]] || { echo "$first_err; API: release $tag has no asset $name" >"$WORKDIR/fetch.err"; return 1; }
+    local args=(-H "Accept: application/octet-stream" -H "X-GitHub-Api-Version: 2022-11-28")
+    [ -n "$GITHUB_TOKEN" ] && args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    fetch "https://api.github.com/repos/$owner/$repo/releases/assets/$id" "$out" "${args[@]}" \
+        || { echo "$first_err; API: $(fetch_error)" >"$WORKDIR/fetch.err"; return 1; }
+    [ -n "$note" ] && echo "  ${Y}downloaded via the API (download URL: $first_err)${N}"
+    return 0
+}
+
 deb_arch_to_asset() {
     case "$1" in
         amd64) echo x86_64 ;; arm64) echo aarch64 ;; riscv64) echo riscv64 ;; *) return 1 ;;
@@ -172,7 +201,7 @@ resolve_from_github() { # repo asset-stem asset-arch
     url="$(jq -r --arg n "$name" '.assets[] | select(.name == $n) | .browser_download_url' "$rel")"
     sums_url="$(jq -r '.assets[] | select(.name == "SHA256SUMS.txt") | .browser_download_url' "$rel" | head -n1)"
     [ -n "$sums_url" ] || fail_reason "release $tag has no SHA256SUMS.txt" || return 1
-    fetch "$sums_url" "$sums" || fail_reason "SHA256SUMS.txt of $tag: $(fetch_error)" || return 1
+    fetch_asset "$sums_url" "$sums" || fail_reason "SHA256SUMS.txt of $tag: $(fetch_error)" || return 1
     sha="$(awk -v n="$name" '{f=$2; sub(/^\*/, "", f)} f == n {print $1; exit}' "$sums")"
     [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || fail_reason "SHA256SUMS.txt of $tag has no checksum for $name" || return 1
     echo "$url $sha $name"
@@ -247,7 +276,7 @@ for key in $(printf '%s\n' "${!LOCAL_VER[@]}" | sort); do
     [ "$DRY_RUN" = "yes" ] && continue
 
     tmp="$WORKDIR/$asset"
-    if ! fetch "$url" "$tmp"; then
+    if ! fetch_asset "$url" "$tmp" note; then
         echo "  ${R}download failed: $(fetch_error)${N}"; FAILED=$((FAILED+1)); continue
     fi
     if ! echo "$sha  $tmp" | sha256sum -c --quiet - >/dev/null 2>&1; then
