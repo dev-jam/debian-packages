@@ -4,7 +4,7 @@
 # aliases
 alias cp='cp -iv'
 alias mv='mv -iv'
-alias rm='rm -Iv'
+alias rm='rm -iv'
 alias la='ls -alh'
 alias mkdir='mkdir -v'
 alias df='df -h'
