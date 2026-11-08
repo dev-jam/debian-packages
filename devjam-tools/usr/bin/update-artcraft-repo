@@ -24,7 +24,11 @@ POST_CMD=""            # e.g. a command that regenerates the repository index
 
 FEED_URL="https://api.storyteller.ai/v1/craft_apps/release_info"
 GITHUB_OWNER="storytold"
-CRAFT_APPS="photocraft vectorcraft filmcraft lightcraft pdfcraft effectcraft designcraft figcraft wordcraft soundcraft deckcraft cadcraft gridcraft"
+# Official apps of the Craft App Suite (all under github.com/storytold), in the order of
+# ArtCraft Launcher's catalog (crates/core/src/catalog.rs). The community app SolidCraft
+# (tangency-labs/solidcraft) is left out: downloads must come from github.com/storytold.
+CRAFT_APPS="photocraft vectorcraft filmcraft lightcraft pdfcraft effectcraft designcraft figcraft wordcraft soundcraft deckcraft cadcraft gridcraft texturecraft materialcraft craft-anything"
+CRAFT_COUNT="$(wc -w <<< "$CRAFT_APPS")"
 
 usage() {
     cat <<EOF
@@ -32,7 +36,7 @@ Usage: ${0##*/} [options]
 
   -r, --repo DIR        repository to check (default: $REPO_DIR)
   -a, --apps LIST       apps to download when missing: "all", "none" or e.g.
-                        "photocraft pdfcraft" (default: $APPS; "all" = the 13 Craft apps,
+                        "photocraft pdfcraft" (default: $APPS; "all" = the $CRAFT_COUNT Craft apps,
                         add artcraft-launcher to the list to include the launcher)
   -k, --keep            keep old debs in <repo>.superseded instead of deleting them
   -n, --dry-run         only report, change nothing
