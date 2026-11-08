@@ -111,10 +111,22 @@ trap 'rm -rf "$WORKDIR"' EXIT
 
 if [ -t 1 ]; then G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; N=$'\e[0m'; else G=""; Y=""; R=""; N=""; fi
 
+# curl's messages go to $WORKDIR/curl.err instead of the terminal: with --retry
+# every attempt prints its own line, which ends up between the app lines. On
+# failure the last message is kept in $WORKDIR/fetch.err for fetch_error.
 fetch() { # url outfile [extra curl args...]
-    local url="$1" out="$2"; shift 2
-    curl -fsSL --retry 3 --retry-delay 5 --connect-timeout 20 "$@" -o "$out" "$url"
+    local url="$1" out="$2" rc=0; shift 2
+    curl -fsSL --retry 3 --retry-delay 5 --connect-timeout 20 "$@" -o "$out" "$url" 2>"$WORKDIR/curl.err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        { grep . "$WORKDIR/curl.err" | tail -n1 | sed 's/^curl: //'; } >"$WORKDIR/fetch.err" || echo "curl exit code $rc" >"$WORKDIR/fetch.err"
+    fi
+    return "$rc"
 }
+
+fetch_error() { cat "$WORKDIR/fetch.err" 2>/dev/null || echo "unknown error"; }
+
+# Why resolve_from_github failed; it runs in $(...), so the reason goes to a file
+fail_reason() { echo "$*" >"$WORKDIR/resolve.err"; return 1; }
 
 gh_api() { # api-path outfile
     local args=(-H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
@@ -152,15 +164,17 @@ resolve_from_feed() { # app-id asset-arch
 resolve_from_github() { # repo asset-stem asset-arch
     local repo="$1" stem="$2" arch="$3"
     local rel="$WORKDIR/$stem.release.json" sums="$WORKDIR/$stem.SHA256SUMS.txt" name url sums_url sha
-    gh_api "/repos/$repo/releases/latest" "$rel" || return 1
+    local tag
+    gh_api "/repos/$repo/releases/latest" "$rel" || fail_reason "GitHub API: $(fetch_error)" || return 1
+    tag="$(jq -r '.tag_name // "?"' "$rel")"
     name="$(jq -r --arg re "$(asset_regex "$stem" "$arch")" '.assets[] | select(.name | test($re)) | .name' "$rel" | head -n1)"
-    [ -n "$name" ] || return 1
+    [ -n "$name" ] || fail_reason "release $tag has no $stem-<version>-linux-$arch.deb" || return 1
     url="$(jq -r --arg n "$name" '.assets[] | select(.name == $n) | .browser_download_url' "$rel")"
     sums_url="$(jq -r '.assets[] | select(.name == "SHA256SUMS.txt") | .browser_download_url' "$rel" | head -n1)"
-    [ -n "$sums_url" ] || return 1
-    fetch "$sums_url" "$sums" || return 1
+    [ -n "$sums_url" ] || fail_reason "release $tag has no SHA256SUMS.txt" || return 1
+    fetch "$sums_url" "$sums" || fail_reason "SHA256SUMS.txt of $tag: $(fetch_error)" || return 1
     sha="$(awk -v n="$name" '{f=$2; sub(/^\*/, "", f)} f == n {print $1; exit}' "$sums")"
-    [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || return 1
+    [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || fail_reason "SHA256SUMS.txt of $tag has no checksum for $name" || return 1
     echo "$url $sha $name"
 }
 
@@ -214,9 +228,11 @@ for key in $(printf '%s\n' "${!LOCAL_VER[@]}" | sort); do
     if [ "$id" != "artcraft-launcher" ] && [ "$FEED_OK" = "yes" ]; then
         hit="$(resolve_from_feed "$id" "$asset_arch" || true)"
     fi
+    rm -f "$WORKDIR/resolve.err"
     [ -n "$hit" ] || hit="$(resolve_from_github "$repo" "$id" "$asset_arch" || true)"
     if [ -z "$hit" ]; then
-        printf '%-20s %-8s %s\n' "$pkg" "$arch" "${R}no release found${N}"; FAILED=$((FAILED+1)); continue
+        printf '%-20s %-8s %s\n' "$pkg" "$arch" "${R}no release: $(cat "$WORKDIR/resolve.err" 2>/dev/null || echo "unknown error")${N}"
+        FAILED=$((FAILED+1)); continue
     fi
     read -r url sha asset <<< "$hit"
     new_ver="$(asset_version "$asset" "$id")"
@@ -232,7 +248,7 @@ for key in $(printf '%s\n' "${!LOCAL_VER[@]}" | sort); do
 
     tmp="$WORKDIR/$asset"
     if ! fetch "$url" "$tmp"; then
-        echo "  ${R}download failed${N}"; FAILED=$((FAILED+1)); continue
+        echo "  ${R}download failed: $(fetch_error)${N}"; FAILED=$((FAILED+1)); continue
     fi
     if ! echo "$sha  $tmp" | sha256sum -c --quiet - >/dev/null 2>&1; then
         echo "  ${R}SHA-256 mismatch, not replaced${N}"; FAILED=$((FAILED+1)); continue
