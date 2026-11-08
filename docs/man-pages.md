@@ -2,8 +2,8 @@
 
 Debian Policy (section 12.1) says that each program, utility and function
 should have an associated manual page. None of the commands in these
-packages has one yet, so lintian reports `no-manual-page` for 83 commands
-(84 with `s-benchmark-copy`).
+packages has one yet, so lintian reports `no-manual-page` for 84 commands
+(85 with `s-benchmark-copy`).
 The warning is overridden in each package (`usr/share/lintian/overrides/`)
 until man pages are written; this file records which commands actually need
 one.
@@ -50,6 +50,7 @@ print a usage text, so `help2man` is cheap here.
 | Package | Command | Help | Purpose |
 |---|---|---|---|
 | devjam-tools | `build-deb-package` | yes | Build package trees with dpkg-deb and lintian |
+| devjam-tools | `check-versions` | yes | Check Version fields against the version rule and the apt repository |
 | devjam-tools | `bpo-build`, `bpo-build-host`, `bpo-resume` | yes | Backport builds from apt source |
 | devjam-tools | `sbuild-local` | yes | Isolated package build |
 | devjam-tools | `appimage2deb` | yes | Repackage an AppImage as a .deb |

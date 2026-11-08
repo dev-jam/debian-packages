@@ -1,0 +1,206 @@
+#!/bin/bash
+# Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# check-versions — check the Version fields in a debian-packages checkout
+# against the version rule and against the debs published in the apt
+# repository checkout.
+#
+# Version rule (Debian Policy 5.6.12, applied to dpkg-deb package trees):
+#   - a change outside the packaging bumps the upstream part and resets the
+#     revision to 1 (1.4-3 -> 1.5-1);
+#   - a change only in the packaging bumps the revision (1.4-2 -> 1.4-3).
+#   Packaging = DEBIAN/, usr/share/doc/<pkg>/ (copyright) and
+#   usr/share/lintian/overrides/ (what debian/ holds in a source package).
+#
+# Checks per package:
+#   - the last version step follows the rule, sorts higher and resets the
+#     revision after an upstream bump;
+#   - no changes after the last version step (uncommitted ones included);
+#   - the version in the source equals the one in pool/, and pool/ holds
+#     exactly one version.
+# A step that broke the rule stays a problem until a later step bumps the
+# upstream part: until then the upstream version stands for two different
+# payloads. Broken steps repaired that way are only counted; -v lists them.
+
+set -uo pipefail
+
+usage() {
+    cat <<EOF
+Usage: ${0##*/} [-v] [-f] PACKAGES_DIR [REPO_DIR]
+
+  PACKAGES_DIR  git checkout of debian-packages
+  REPO_DIR      git checkout of the apt repository (debian); without it the
+                published versions are not checked
+  -v            also list every version step of every package
+  -f            with -v: name the changed payload files
+  -h            this help
+
+Exit status: 0 when every package is ok, 1 when there are problems.
+EOF
+}
+
+VERBOSE=0 FILES=0
+while getopts "vfh" opt; do
+    case "$opt" in
+        v) VERBOSE=1 ;;
+        f) FILES=1 ;;
+        h) usage; exit 0 ;;
+        *) usage >&2; exit 2 ;;
+    esac
+done
+shift $((OPTIND - 1))
+[ $# -ge 1 ] && [ $# -le 2 ] || { usage >&2; exit 2; }
+
+PKG_DIR="$(realpath "$1")"
+REPO_DIR=""; [ $# -eq 2 ] && REPO_DIR="$(realpath "$2")"
+git -C "$PKG_DIR" rev-parse --git-dir >/dev/null 2>&1 || { echo "Not a git checkout: $PKG_DIR" >&2; exit 2; }
+if [ -n "$REPO_DIR" ]; then
+    git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1 || { echo "Not a git checkout: $REPO_DIR" >&2; exit 2; }
+fi
+command -v dpkg >/dev/null || { echo "Missing tool: dpkg" >&2; exit 2; }
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    R=$'\e[31m' G=$'\e[32m' Y=$'\e[33m' D=$'\e[2m' N=$'\e[0m'
+else
+    R="" G="" Y="" D="" N=""
+fi
+
+# Published versions per package: "pkg version" lines from pool/ in the
+# committed tree of REPO_DIR (what GitHub Pages serves)
+declare -A PUBLISHED=() PUB_COUNT=()
+if [ -n "$REPO_DIR" ]; then
+    while IFS= read -r f; do
+        b="${f##*/}"; b="${b%.deb}"
+        [[ "$b" =~ ^([^_]+)_([^_]+)_[^_]+$ ]] || continue
+        p="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
+        PUB_COUNT[$p]=$(( ${PUB_COUNT[$p]:-0} + 1 ))
+        if [ -z "${PUBLISHED[$p]:-}" ] || dpkg --compare-versions "$v" gt "${PUBLISHED[$p]}"; then
+            PUBLISHED[$p]="$v"
+        fi
+    done < <(git -C "$REPO_DIR" ls-tree -r --name-only HEAD -- pool | grep '\.deb$')
+fi
+
+cd "$PKG_DIR" || exit 2
+
+# Payload files among the changed paths of one package (read from stdin)
+payload_only() { grep -vE "^$1/(DEBIAN/|usr/share/doc/$1/|usr/share/lintian/overrides/)" || true; }
+
+version_at() { git show "$1:$2/DEBIAN/control" 2>/dev/null | sed -n 's/^Version:[[:space:]]*//p' | head -n1; }
+
+packages=0 bad=0 old_bad=0
+problems=()
+detail=()
+
+for ctl in */DEBIAN/control; do
+    pkg="${ctl%%/*}"
+    packages=$((packages + 1))
+    issues=()
+
+    # Version steps, oldest first: commits where the Version field changed
+    prev_ver="" prev_c="" open_issue="" steps=()
+    for c in $(git log --reverse --format=%H -- "$ctl"); do
+        ver="$(version_at "$c" "$pkg")"
+        [ -n "$ver" ] || continue
+        if [ -z "$prev_ver" ]; then prev_ver="$ver" prev_c="$c"; continue; fi
+        [ "$ver" = "$prev_ver" ] && continue
+
+        changed="$(git diff --name-only "$prev_c" "$c" -- "$pkg" | payload_only "$pkg")"
+        nfiles=$(printf '%s' "$changed" | grep -c . || true)
+        up_old="${prev_ver%-*}" up_new="${ver%-*}"
+        kind="revision"; [ "$up_new" != "$up_old" ] && kind="upstream"
+
+        step_issue=""
+        if ! dpkg --compare-versions "$ver" gt "$prev_ver"; then
+            step_issue="not higher than $prev_ver"
+        elif [ "$kind" = revision ] && [ "$nfiles" -gt 0 ]; then
+            step_issue="$nfiles payload file(s) changed, only the revision was bumped"
+        elif [ "$kind" = upstream ] && [[ "$ver" == *-* ]] && [ "${ver##*-}" != 1 ]; then
+            step_issue="upstream bumped, revision not reset to 1"
+        fi
+        # An upstream bump repairs an earlier broken step; a new broken step
+        # replaces the open one
+        if [ -n "$step_issue" ]; then
+            [ -n "$open_issue" ] && old_bad=$((old_bad + 1))
+            open_issue="step $prev_ver -> $ver: $step_issue"
+        elif [ "$kind" = upstream ] && [ -n "$open_issue" ]; then
+            old_bad=$((old_bad + 1)); open_issue=""
+        fi
+
+        if [ "$VERBOSE" -eq 1 ]; then
+            mark="${G}ok${N}"; [ -n "$step_issue" ] && mark="${R}$step_issue${N}"
+            line="$(printf '    %-22s %-8s %s  %s' "$prev_ver -> $ver" "$kind" "$(git log -1 --format=%h "$c")" "$mark")"
+            steps+=("$line")
+            if [ "$FILES" -eq 1 ] && [ "$nfiles" -gt 0 ]; then
+                while IFS= read -r f; do steps+=("      ${D}${f#"$pkg"/}${N}"); done <<<"$changed"
+            fi
+        fi
+        prev_ver="$ver" prev_c="$c"
+    done
+    current="$(sed -n 's/^Version:[[:space:]]*//p' "$ctl" | head -n1)"
+
+    # A broken step without an upstream bump after it
+    if [ -n "$open_issue" ]; then
+        if [[ "$open_issue" == "step "*" -> $prev_ver: "* ]]; then
+            issues+=("$open_issue")
+        else
+            issues+=("$open_issue; no upstream bump since")
+        fi
+    fi
+
+    # Changes after the last version step: committed and uncommitted
+    if [ -n "$prev_c" ]; then
+        all="$( { git diff --name-only "$prev_c" HEAD -- "$pkg"; git diff --name-only HEAD -- "$pkg"; } | sort -u)"
+        pay="$(printf '%s\n' "$all" | grep . | payload_only "$pkg")"
+        if [ -n "$pay" ]; then
+            issues+=("payload changed since $prev_ver: bump the upstream part")
+        elif [ -n "$(printf '%s' "$all" | grep .)" ] && [ "$current" = "$prev_ver" ]; then
+            issues+=("packaging changed since $prev_ver: bump the revision")
+        fi
+    fi
+
+    pub="-"
+    if [ -n "$REPO_DIR" ]; then
+        pub="${PUBLISHED[$pkg]:-}"
+        if [ -z "$pub" ]; then
+            pub="-"; issues+=("not in pool/")
+        elif [ "$pub" != "$current" ]; then
+            if dpkg --compare-versions "$pub" lt "$current"; then
+                issues+=("not published yet (pool/ has $pub)")
+            else
+                issues+=("pool/ has a newer version ($pub)")
+            fi
+        fi
+        [ "${PUB_COUNT[$pkg]:-0}" -gt 1 ] && issues+=("pool/ holds ${PUB_COUNT[$pkg]} versions")
+    fi
+
+    if [ "${#issues[@]}" -gt 0 ]; then
+        bad=$((bad + 1))
+        problems+=("$(printf '%s %-44s %-22s %s' "${R}✗${N}" "$pkg" "$current" "${issues[0]}")")
+        for i in "${issues[@]:1}"; do problems+=("$(printf '  %-44s %-22s %s' "" "" "$i")"); done
+    fi
+    if [ "$VERBOSE" -eq 1 ]; then
+        st="${G}ok${N}"; [ "${#issues[@]}" -gt 0 ] && st="${R}${#issues[@]} problem(s)${N}"
+        detail+=("$(printf '%s  %s (published %s)  %s' "$pkg" "$current" "$pub" "$st")")
+        [ "${#steps[@]}" -gt 0 ] && detail+=("${steps[@]}")
+    fi
+done
+
+if [ "$VERBOSE" -eq 1 ]; then
+    printf '%s\n' "${detail[@]}"
+    echo
+fi
+if [ "$bad" -gt 0 ]; then
+    printf '  %-44s %-22s %s\n' "package" "version" "problem"
+    printf '%s\n' "${problems[@]}"
+    echo
+fi
+
+summary="$packages packages: "
+if [ "$bad" -eq 0 ]; then summary+="${G}all ok${N}"; else summary+="$((packages - bad)) ok, ${R}$bad with problems${N}"; fi
+[ -z "$REPO_DIR" ] && summary+=" ${D}(published versions not checked)${N}"
+echo "$summary"
+if [ "$old_bad" -gt 0 ] && [ "$VERBOSE" -eq 0 ]; then
+    echo "${D}$old_bad older version step(s) broke the rule and were repaired by an upstream bump; -v lists them.${N}"
+fi
+
+[ "$bad" -eq 0 ]
