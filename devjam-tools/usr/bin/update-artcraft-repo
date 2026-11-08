@@ -111,12 +111,24 @@ trap 'rm -rf "$WORKDIR"' EXIT
 
 if [ -t 1 ]; then G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; N=$'\e[0m'; else G=""; Y=""; R=""; N=""; fi
 
+# Retries per request. fetch_asset uses fewer for the first route, so a dead
+# download URL fails fast and the API route takes over (bash: a 'local' copy in
+# the caller is what fetch sees).
+FETCH_RETRY=(--retry 2 --retry-delay 5)
+
+# The API fallback for downloads costs one request per release (the tag lookup,
+# cached) plus one per asset. It is skipped when fewer requests than this are
+# left, so the script never uses up the hourly limit (5000 with a token, 60
+# without). GET /rate_limit itself does not count against the limit.
+API_RESERVE_AUTH=200
+API_RESERVE_ANON=20
+
 # curl's messages go to $WORKDIR/curl.err instead of the terminal: with --retry
 # every attempt prints its own line, which ends up between the app lines. On
 # failure the last message is kept in $WORKDIR/fetch.err for fetch_error.
 fetch() { # url outfile [extra curl args...]
     local url="$1" out="$2" rc=0; shift 2
-    curl -fsSL --retry 3 --retry-delay 5 --connect-timeout 20 "$@" -o "$out" "$url" 2>"$WORKDIR/curl.err" || rc=$?
+    curl -fsSL "${FETCH_RETRY[@]}" --connect-timeout 20 "$@" -o "$out" "$url" 2>"$WORKDIR/curl.err" || rc=$?
     if [ "$rc" -ne 0 ]; then
         { grep . "$WORKDIR/curl.err" | tail -n1 | sed 's/^curl: //'; } >"$WORKDIR/fetch.err" || echo "curl exit code $rc" >"$WORKDIR/fetch.err"
     fi
@@ -134,6 +146,23 @@ gh_api() { # api-path outfile
     fetch "https://api.github.com$1" "$2" "${args[@]}"
 }
 
+# Whether the API fallback may spend requests: at least API_RESERVE_AUTH (with a
+# token) or API_RESERVE_ANON (without) must be left. Unknown counts as no.
+api_budget_ok() {
+    local rl="$WORKDIR/rate_limit.json" left reset reserve=$API_RESERVE_ANON
+    [ -n "$GITHUB_TOKEN" ] && reserve=$API_RESERVE_AUTH
+    if ! gh_api "/rate_limit" "$rl"; then
+        echo "rate limit unknown ($(fetch_error))" >"$WORKDIR/budget.err"; return 1
+    fi
+    left="$(jq -r '.resources.core.remaining // empty' "$rl")"
+    reset="$(jq -r '.resources.core.reset // empty' "$rl")"
+    [[ "$left" =~ ^[0-9]+$ ]] || { echo "rate limit unknown" >"$WORKDIR/budget.err"; return 1; }
+    if [ "$left" -lt "$reserve" ]; then
+        echo "only $left API requests left (reserve $reserve), resets at $(date -d "@${reset:-0}" +%H:%M 2>/dev/null || echo '?')" >"$WORKDIR/budget.err"
+        return 1
+    fi
+}
+
 # Download a release asset. First the normal download URL
 # (https://github.com/<owner>/<repo>/releases/download/<tag>/<name>); when that
 # fails, the same asset through the API (releases/assets/<id> with
@@ -143,13 +172,18 @@ gh_api() { # api-path outfile
 # host it is redirected to (a different host), so the token stays with GitHub.
 fetch_asset() { # url outfile [note]  (note: say on stderr when the API route was used)
     local url="$1" out="$2" note="${3:-}" first_err path owner repo tag name rel id
+    local -a FETCH_RETRY=(--retry 1 --retry-delay 3)
     fetch "$url" "$out" && return 0
+    FETCH_RETRY=(--retry 2 --retry-delay 5)
     first_err="$(fetch_error)"
     path="${url#https://github.com/}"
     if ! [[ "$url" == https://github.com/* && "$path" =~ ^([^/]+)/([^/]+)/releases/download/([^/]+)/([^/]+)$ ]]; then
         return 1
     fi
     owner="${BASH_REMATCH[1]}" repo="${BASH_REMATCH[2]}" tag="${BASH_REMATCH[3]}" name="${BASH_REMATCH[4]}"
+    if ! api_budget_ok; then
+        echo "$first_err; API fallback skipped: $(cat "$WORKDIR/budget.err")" >"$WORKDIR/fetch.err"; return 1
+    fi
     rel="$WORKDIR/$repo.$tag.tag.json"
     [ -s "$rel" ] || gh_api "/repos/$owner/$repo/releases/tags/$tag" "$rel" \
         || { echo "$first_err; API: $(fetch_error)" >"$WORKDIR/fetch.err"; return 1; }
