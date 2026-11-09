@@ -1,2 +1,2 @@
-/etc/profile.d/VULKAN_VIDEO_ON.sh
 /etc/profile.d/mesa.sh
+/etc/profile.d/vulkan-video-on.sh
