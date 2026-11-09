@@ -9,3 +9,5 @@
 # hstr.bashrc deliberately leaves both out, so the order of loading is irrelevant.
 export HISTFILESIZE=100000
 export HISTSIZE=10000
+export HISTTIMEFORMAT="%F %T "
+export HISTIGNORE="ls:ll:la:cd:pwd:clear:exit:history"
