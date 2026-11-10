@@ -23,6 +23,7 @@ POST_CMD=""
 APP_TABLE=(
     "freetube|FreeTubeApp/FreeTube|^freetube_[0-9][0-9A-Za-z._]*_amd64\\.deb\$|yes"
     "jan|janhq/jan|^Jan_[0-9][^_]*_amd64\\.deb\$|no"
+    "marktext|marktext/marktext|^marktext-linux-[0-9][^-]*\\.deb\$|no"
     "upscayl|upscayl/upscayl|^upscayl-[0-9][^-]*-linux\\.deb\$|no"
     "winboat|winboat-org/winboat|^winboat-[0-9][^-]*-amd64\\.deb\$|no"
     "windows95|felixrieseberg/windows95|^windows95_[0-9][^_]*_amd64\\.deb\$|no"
