@@ -1,5 +1,5 @@
 Package: devjam-gpu-x11-xlibre-amdgpu
-Version: 1.0-1
+Version: 1.0-2
 Section: x11
 Priority: optional
 Architecture: all
@@ -13,6 +13,6 @@ Description: Use the amdgpu DDX of XLibre on AMD GPUs
  to devjam-gpu-x11-xlibre-modesetting, which selects the modesetting
  driver for the same GPUs; the two packages cannot be installed
  together. Variable refresh rate and async flips on secondary outputs
- are available through devjam-gpu-x11-xlibre-modesetting-vrr and
- devjam-gpu-x11-xlibre-modesetting-asyncflip; atomic mode setting is
- not supported by the amdgpu DDX.
+ are available through devjam-gpu-x11-xlibre-vrr and
+ devjam-gpu-x11-xlibre-asyncflip; atomic mode setting is not supported
+ by the amdgpu DDX.
