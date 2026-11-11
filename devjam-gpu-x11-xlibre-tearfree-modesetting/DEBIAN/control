@@ -1,5 +1,5 @@
 Package: devjam-gpu-x11-xlibre-tearfree-modesetting
-Version: 1.7-2
+Version: 1.7-3
 Section: oldlibs
 Priority: optional
 Architecture: all
@@ -10,5 +10,5 @@ Description: Transitional package for devjam-gpu-x11-xlibre-modesetting
  /etc/X11/xorg.conf.d/20-modesetting.conf and pulls in
  devjam-gpu-x11-xlibre-modesetting and
  devjam-gpu-x11-xlibre-modesetting-atomic. Variable refresh rate is no
- longer enabled; install devjam-gpu-x11-xlibre-modesetting-vrr for it. It
- can be removed safely.
+ longer enabled; install devjam-gpu-x11-xlibre-vrr for it. It can be
+ removed safely.

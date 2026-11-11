@@ -4,8 +4,6 @@ Section: x11
 Priority: optional
 Architecture: all
 Recommends: xlibre
-Breaks: devjam-gpu-x11-xlibre-modesetting-asyncflip (<< 1.0-4)
-Replaces: devjam-gpu-x11-xlibre-modesetting-asyncflip (<< 1.0-4)
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: Async flips on secondary outputs for modesetting and amdgpu
  X11 OutputClass section that enables AsyncFlipSecondaries in the
