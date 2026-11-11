@@ -64,8 +64,8 @@ The packages in the *Science / lab setups* section are published in the `science
 | `devjam-gpu-x11-xlibre-dmabuf` | DMA-BUF support for the XLibre server |
 | `devjam-gpu-x11-xlibre-modesetting` | Use the XLibre modesetting driver on Intel and AMD GPUs (TearFree is on by default) |
 | `devjam-gpu-x11-xlibre-modesetting-atomic` | Atomic mode setting for the modesetting driver |
-| `devjam-gpu-x11-xlibre-modesetting-vrr` | Variable refresh rate for the modesetting driver (not for lab timing) |
-| `devjam-gpu-x11-xlibre-modesetting-asyncflip` | Async flips on secondary outputs for the modesetting driver |
+| `devjam-gpu-x11-xlibre-modesetting-vrr` | Variable refresh rate for the modesetting or amdgpu driver (not for lab timing) |
+| `devjam-gpu-x11-xlibre-modesetting-asyncflip` | Async flips on secondary outputs for the modesetting or amdgpu driver |
 | `devjam-gpu-x11-xlibre-tearfree-amdgpu` | Transitional package, replaced by `devjam-gpu-x11-xlibre-modesetting` |
 | `devjam-gpu-x11-xlibre-tearfree-modesetting` | Transitional package, replaced by `devjam-gpu-x11-xlibre-modesetting` |
 | `devjam-gpu-x11-xlibre-tearfree-plasma` | XLibre TearFree configuration (Plasma) |

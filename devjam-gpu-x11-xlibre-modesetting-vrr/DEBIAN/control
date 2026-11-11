@@ -1,14 +1,13 @@
 Package: devjam-gpu-x11-xlibre-modesetting-vrr
-Version: 1.0-2
+Version: 1.0-3
 Section: x11
 Priority: optional
 Architecture: all
-Depends: devjam-gpu-x11-xlibre-modesetting
 Recommends: xlibre
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: Variable refresh rate for the modesetting driver of XLibre
+Description: Variable refresh rate for the modesetting and amdgpu drivers
  X11 OutputClass section that enables variable refresh rate in the
- modesetting driver (default: off). VRR is only used by fullscreen
- applications that flip via the Present extension on a VRR-capable
- display. Not recommended for experiments that need a fixed refresh
- rate.
+ modesetting driver of XLibre or the amdgpu DDX (default: off). VRR is
+ only used by fullscreen applications that flip via the Present
+ extension on a VRR-capable display. Not recommended for experiments
+ that need a fixed refresh rate.
