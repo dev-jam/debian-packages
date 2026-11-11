@@ -1,6 +1,0 @@
-#!/bin/sh
-set -e
-
-dpkg-maintscript-helper rm_conffile /etc/X11/xorg.conf.d/20-amdgpu.conf 1.6-1~ -- "$@"
-
-exit 0
