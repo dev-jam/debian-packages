@@ -4,7 +4,8 @@
 
 ### XLibre modesetting
 # Same OutputClass sections as the devjam-gpu-x11-xlibre-modesetting,
-# -atomic and -asyncflip packages, which are not installed in the live image.
+# -modesetting-atomic and devjam-gpu-x11-xlibre-asyncflip packages, which
+# are not installed in the live image.
 # TearFree is on by default in the modesetting driver of XLibre.
 
 mkdir -p /etc/X11/xorg.conf.d
@@ -31,9 +32,9 @@ EndSection
 
 ## Async flips on secondary outputs, for mirrored lab displays (default: off)
 
-cat > /etc/X11/xorg.conf.d/30-devjam-modesetting-asyncflip.conf << !
+cat > /etc/X11/xorg.conf.d/30-devjam-asyncflip.conf << !
 Section "OutputClass"
-    Identifier  "devjam modesetting asyncflip"
+    Identifier  "devjam asyncflip"
     MatchDriver "i915|xe|amdgpu"
     Option      "AsyncFlipSecondaries" "true"
 EndSection
