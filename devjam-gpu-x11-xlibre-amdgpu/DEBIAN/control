@@ -1,0 +1,18 @@
+Package: devjam-gpu-x11-xlibre-amdgpu
+Version: 1.0-1
+Section: x11
+Priority: optional
+Architecture: all
+Depends: xserver-xlibre-video-amdgpu | xserver-xorg-video-amdgpu
+Recommends: xlibre, devjam-gpu-x11-xlibre-dmabuf
+Conflicts: devjam-gpu-x11-xlibre-modesetting
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Use the amdgpu DDX of XLibre on AMD GPUs
+ X11 OutputClass section that selects the amdgpu DDX for GPUs on the
+ amdgpu kernel driver, with TearFree enabled. This is the alternative
+ to devjam-gpu-x11-xlibre-modesetting, which selects the modesetting
+ driver for the same GPUs; the two packages cannot be installed
+ together. Variable refresh rate and async flips on secondary outputs
+ are available through devjam-gpu-x11-xlibre-modesetting-vrr and
+ devjam-gpu-x11-xlibre-modesetting-asyncflip; atomic mode setting is
+ not supported by the amdgpu DDX.
