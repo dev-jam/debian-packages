@@ -8,6 +8,15 @@ case "$1" in
             udevadm control --reload || true
             udevadm trigger || true
         fi
+
+        # switch-rtirq before 1.1-1 limited only rtirq.service to experiment
+        # mode. Extend that choice to rtirq-resume.service, which also runs
+        # "rtirq start" at boot and after suspend.
+        if [ -f /etc/systemd/system/rtirq.service.d/experiment_mode.conf ] \
+            && [ ! -f /etc/systemd/system/rtirq-resume.service.d/experiment_mode.conf ]; then
+            mkdir -p /etc/systemd/system/rtirq-resume.service.d
+            cp /usr/share/devjam/rtirq/experiment_mode.conf /etc/systemd/system/rtirq-resume.service.d/
+        fi
         ;;
 esac
 

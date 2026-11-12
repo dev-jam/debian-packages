@@ -23,7 +23,7 @@ that change system behaviour. These need a man page most.
 
 | Package | Command | Help | Purpose |
 |---|---|---|---|
-| devjam-science-experiment-mode | `switch-rtirq` | no | Link or unlink rtirq to experiment mode |
+| devjam-science-experiment-mode | `switch-rtirq` | yes | Run rtirq only in experiment mode, or always |
 | devjam-system-config-rtirq | `verify-rtirq` | no | Show the IRQ thread priorities rtirq set |
 | devjam-science-experiment-mode | `check-isolation` | yes | Check CPU isolation in experiment mode |
 | devjam-system-config-rtirq | `check-rt-processes` | yes | List real-time threads |

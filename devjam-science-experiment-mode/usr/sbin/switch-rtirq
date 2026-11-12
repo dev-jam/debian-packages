@@ -1,81 +1,66 @@
 #!/bin/sh
 # Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Chooses when rtirq runs:
+#   experiment   only in experiment mode (kernel parameter experiment_mode=1)
+#   always       in normal and in experiment mode (default)
+# It adds or removes a drop-in with ConditionKernelCommandLine for
+# rtirq.service and rtirq-resume.service (which also runs "rtirq start", at
+# boot and after suspend). Without an argument it shows the current choice.
+# The old arguments still work: off = experiment, on/default = always.
 
-# Define allowed arguments
-ALLOWED_ARGS="default on off"
+units="rtirq.service rtirq-resume.service"
+preset_file=/usr/share/devjam/rtirq/experiment_mode.conf
 
-if [ -z "$1" ]; then
-	: # No output when no argument is provided
-else
-	case "$1" in
-		default|on|off)
-			;; # No output for valid arguments
-		*)
-			echo "Error: Argument '$1' is not allowed. Allowed arguments are: default on off"
-			exit 1
-			;;
-	esac
+usage() {
+    echo "Usage: ${0##*/} [experiment|always]"
+}
+
+drop_in() {
+    echo "/etc/systemd/system/$1.d/experiment_mode.conf"
+}
+
+case "${1:-}" in
+    "") action=status ;;
+    experiment|off) action=experiment ;;
+    always|on|default) action=always ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+esac
+
+if [ "$action" != status ] && [ "$(id -u)" -ne 0 ]; then
+    echo "Run as root (sudo ${0##*/} $1)." >&2
+    exit 1
 fi
 
+case " $(cat /proc/cmdline) " in
+    *" experiment_mode=1 "*) echo "Running in experiment mode" ;;
+    *) echo "Running in normal mode" ;;
+esac
+echo "Isolated CPUs: $(grep . /sys/devices/system/cpu/isolated 2>/dev/null || echo none)"
 echo
 
-# Check for experiment_mode parameter
-if grep -q 'experiment_mode=1' /proc/cmdline; then
-  echo "Running in experiment mode"
+if [ "$action" != status ]; then
+    for unit in $units; do
+        if [ "$action" = experiment ]; then
+            mkdir -p "$(dirname "$(drop_in "$unit")")"
+            cp "$preset_file" "$(drop_in "$unit")"
+        else
+            rm -f "$(drop_in "$unit")"
+            rmdir "$(dirname "$(drop_in "$unit")")" 2>/dev/null
+        fi
+    done
+    systemctl daemon-reload
+    # A restart stops rtirq and starts it again only where the condition holds.
+    if systemctl is-enabled --quiet rtirq.service; then
+        systemctl restart rtirq.service
+    fi
+fi
+
+if [ -f "$(drop_in rtirq.service)" ]; then
+    echo "rtirq runs only in experiment mode."
 else
-  echo "Running in normal mode"
+    echo "rtirq runs in normal and in experiment mode."
 fi
-
-# Check for isolcpus parameter
-ISOL_CPUS=$(grep -oP 'isolcpus=\K[0-9,-]+' /proc/cmdline || true)
-if [ -n "$ISOL_CPUS" ]; then
-  echo "Isolated CPUs: $ISOL_CPUS"
-else
-  echo "No isolated CPUs found"
-fi
-
-echo
-
-mkdir -p "/etc/systemd/system/rtirq.service.d"
-conf_file="/etc/systemd/system/rtirq.service.d/experiment_mode.conf"
-preset_file="/usr/share/devjam/rtirq/experiment_mode.conf"
-
-if [ -z "$1" ]; then
-	if [ -f "${conf_file}" ]; then
-		printf "Status:\n\nrtiriq linked to experiment mode.\nrtirq will be rejected in normal mode and will only start in experiment mode if rtirq service is enabled\n\n"
-	else
-		printf "Status:\n\nrtirq unlinked to experiment mode.\nrtirq will not be rejected in normal mode and will start in normal mode and experiment mode if rtirq service is enabled\n\n"
-	fi
-elif [ "$1" = "default" ] || [ "$1" = "on" ]; then
-	if [ -f "${conf_file}" ]; then
-		printf "\nUnlinking rtirq to experiment mode, reloading setup...\n"
-		rm -f "${conf_file}"
-		if command -v systemctl >/dev/null 2>&1; then
-			systemctl daemon-reload || true
-			if systemctl is-enabled --quiet rtirq.service; then
-				systemctl restart rtirq.service || true
-			fi
-		fi
-		printf "Setup complete.\n\nStatus: rtirq will not be rejected in normal mode and will start in normal mode and experiment mode if rtirq service is enabled.\n\n"
-	else
-		printf "Status:\n\nrtirq already unlinked to experiment mode.\nrtirq will not be rejected in normal mode and will start in normal mode and experiment if rtirq service is enabled\n\n"
-	fi
-elif [ "$1" = "off" ]; then
-	if [ ! -f "${conf_file}" ]; then
-		printf "\nLinking rtirq to experiment mode, reloading setup...\n"
-		cp -T "${preset_file}" "${conf_file}"
-
-		if command -v systemctl >/dev/null 2>&1; then
-			systemctl daemon-reload || true
-
-			if systemctl is-enabled --quiet rtirq.service; then
-				systemctl restart rtirq.service || true
-			fi
-		fi
-		printf "Setup complete.\n\nStatus: rtirq will be rejected in normal mode and will only start in experiment mode if rtirq service is enabled.\n\n"
-	else
-		printf "Status:\n\nrtiriq already linked to experiment mode.\nrtirq will be rejected in normal mode and will only start in experiment mode if rtirq service is enabled\n\n"
-	fi
-fi
-
+echo "rtirq.service: $(systemctl is-enabled rtirq.service 2>/dev/null), $(systemctl is-active rtirq.service 2>/dev/null)"
