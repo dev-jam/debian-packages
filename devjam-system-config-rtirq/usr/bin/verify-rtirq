@@ -1,29 +1,57 @@
 #!/bin/bash
 # Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Minimal verification of RTIRQ IRQ pinning
-# Only checks what RTIRQ did on boot
-# Must be run as root for /proc/irq access
+#
+# Shows what rtirq did: the real-time priority of the IRQ threads of the
+# drivers in RTIRQ_NAME_LIST (/etc/rtirq.conf), and the CPUs those IRQs may
+# run on. rtirq only sets priorities (SCHED_FIFO), not CPUs; without rtirq
+# every IRQ thread runs at SCHED_FIFO 50.
 
-RTIRQ_CONF="/etc/rtirq.conf"
+set -u
 
-# --- Read driver list ---
-RTIRQ_NAME_LIST=$(grep -E '^RTIRQ_NAME_LIST=' "$RTIRQ_CONF" | cut -d'=' -f2- | tr -d '"')
-IFS=' ' read -r -a DRIVERS <<< "$RTIRQ_NAME_LIST"
+case "${1:-}" in
+    "") ;;
+    -h|--help) echo "Usage: ${0##*/}   (shows the IRQ thread priorities rtirq set)"; exit 0 ;;
+    *) echo "Usage: ${0##*/}   (no options)" >&2; exit 2 ;;
+esac
 
-echo "=== RTIRQ Verification ==="
-echo "Date: $(date)"
+RTIRQ_NAME_LIST=""
+# shellcheck disable=SC1091
+[ -r /etc/rtirq.conf ] && . /etc/rtirq.conf
+
+echo "rtirq.service: $(systemctl is-enabled rtirq.service 2>/dev/null), $(systemctl is-active rtirq.service 2>/dev/null)"
+if [[ $(uname -v) == *PREEMPT_RT* ]]; then
+    echo "Threaded IRQs: yes (PREEMPT_RT kernel)"
+elif [[ " $(cat /proc/cmdline) " == *" threadirqs "* ]]; then
+    echo "Threaded IRQs: yes (threadirqs)"
+else
+    echo "Threaded IRQs: no -- rtirq needs a PREEMPT_RT kernel or the kernel parameter threadirqs"
+fi
+echo "RTIRQ_NAME_LIST: $RTIRQ_NAME_LIST"
 echo
 
-for driver in "${DRIVERS[@]}"; do
-    echo "Driver: $driver"
-    grep -i "$driver" /proc/interrupts | while read -r line; do
-        irq_num=$(echo "$line" | awk -F: '{print $1}' | tr -d ' ')
-        irq_name=$(echo "$line" | awk '{print $NF}')
-        affinity_file="/proc/irq/$irq_num/smp_affinity_list"
-        [ ! -f "$affinity_file" ] && continue
-        affinity=$(cat "$affinity_file")
-        echo "  IRQ $irq_num ($irq_name) -> CPUs: $affinity"
-    done
-    echo
+# The names as rtirq matches them against /proc/interrupts: usb stands for
+# the USB host controllers, snd-usb for the controller of a USB sound card
+# (which usb already covers).
+patterns=()
+for name in $RTIRQ_NAME_LIST; do
+    case "$name" in
+        usb) patterns+=("[eoux]hci.hcd") ;;
+        snd-usb) ;;
+        *) patterns+=("$name") ;;
+    esac
 done
+match=$(IFS='|'; echo "${patterns[*]}")
+
+# IRQ threads that match RTIRQ_NAME_LIST or do not have the default priority.
+printf '%-5s %-6s %4s  %-9s %s\n' IRQ Policy Prio "IRQ CPUs" "Device"
+ps -eLo cls=,rtprio=,comm= | while read -r cls prio comm; do
+    [[ $comm == irq/[0-9]* ]] || continue
+    irq=${comm#irq/}
+    irq=${irq%%-*}
+    line=$(grep -E "^ *$irq:" /proc/interrupts)
+    if [ "$prio" != 50 ] || { [ -n "$match" ] && grep -qE "$match" <<< "$line"; }; then
+        printf '%-5s %-6s %4s  %-9s %s\n' "$irq" "$cls" "$prio" \
+            "$(cat "/proc/irq/$irq/smp_affinity_list" 2>/dev/null)" "${comm#irq/"$irq"-}"
+    fi
+done | sort -k3,3nr -k1,1n

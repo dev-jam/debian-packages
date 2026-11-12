@@ -12,7 +12,9 @@ Description: Real-time IRQ priorities (rtirq) for deterministic timing
  EEG, button boxes and audio-visual stimuli: audio, USB, parallel port
  and Intel GPU interrupts get real-time priorities. /etc/rtirq.conf of
  the rtirq package is diverted and replaced by this configuration.
- Includes verify-rtirq and check-rt-processes to check the result.
+ rtirq needs threaded IRQs (a PREEMPT_RT kernel or the kernel parameter
+ threadirqs). verify-rtirq shows the priorities rtirq set and
+ check-rt-processes lists all real-time threads.
  .
  Works on its own, without experiment mode. devjam-science-experiment-mode
  can limit rtirq to experiment mode (switch-rtirq).

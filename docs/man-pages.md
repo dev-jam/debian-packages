@@ -24,9 +24,9 @@ that change system behaviour. These need a man page most.
 | Package | Command | Help | Purpose |
 |---|---|---|---|
 | devjam-science-experiment-mode | `switch-rtirq` | no | Link or unlink rtirq to experiment mode |
-| devjam-system-config-rtirq | `verify-rtirq` | no | Show the IRQ pinning rtirq applied |
+| devjam-system-config-rtirq | `verify-rtirq` | no | Show the IRQ thread priorities rtirq set |
 | devjam-science-experiment-mode | `check-isolation` | yes | Check CPU isolation in experiment mode |
-| devjam-system-config-rtirq | `check-rt-processes` | no | List real-time processes |
+| devjam-system-config-rtirq | `check-rt-processes` | yes | List real-time threads |
 | devjam-science-experiment-mode | `usb-affinity` | yes | USB tree with controller IRQs and CPU affinity |
 | devjam-science-experiment-mode | `update-grub-custom-experiment-mode` | no | Generate the experiment mode GRUB entries |
 | devjam-science-opensesame-psychopy | `manage-opensesame-affinity` | yes | Set the CPU affinity of OpenSesame |
