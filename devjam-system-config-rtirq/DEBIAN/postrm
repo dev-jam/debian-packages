@@ -1,0 +1,25 @@
+#!/bin/sh
+set -e
+
+# Give /etc/rtirq.conf back to the rtirq package (see preinst).
+case "$1" in
+    remove|abort-install|disappear)
+        if [ "$(dpkg-divert --listpackage /etc/rtirq.conf)" = "devjam-system-config-rtirq" ]; then
+            dpkg-divert --package devjam-system-config-rtirq \
+                --remove --rename --divert /etc/rtirq.conf.rtirq /etc/rtirq.conf
+        fi
+        ;;
+esac
+
+case "$1" in
+    remove)
+        if [ -d /run/systemd/system ]; then
+            # rtirq goes back to its own configuration. deb-systemd-invoke
+            # only (re)starts units that are enabled or running, and
+            # honours policy-rc.d.
+            deb-systemd-invoke restart 'rtirq.service' >/dev/null 2>&1 || true
+        fi
+        ;;
+esac
+
+exit 0

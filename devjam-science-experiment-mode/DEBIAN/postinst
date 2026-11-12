@@ -13,7 +13,9 @@ esac
 
 # auto-pin-audio.service: enable on first installation and keep the
 # administrator's choice on upgrades, then start or restart it
-# (the snippets dh_installsystemd generates)
+# (the snippets dh_installsystemd generates). The enable state is kept per
+# unit, so a choice made while the service was part of
+# devjam-science-experiment-mode-rtirq carries over.
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
     # was-enabled defaults to true, so new installations run enable.
     if deb-systemd-helper --quiet was-enabled 'auto-pin-audio.service'; then
@@ -32,11 +34,6 @@ if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-decon
             _dh_action=start
         fi
         deb-systemd-invoke $_dh_action 'auto-pin-audio.service' >/dev/null || true
-
-        # rtirq.service (rtirq package) reads /etc/rtirq.conf; restart it to
-        # apply the lab configuration. deb-systemd-invoke only (re)starts
-        # units that are enabled or running, and honours policy-rc.d.
-        deb-systemd-invoke restart 'rtirq.service' >/dev/null 2>&1 || true
     fi
 fi
 

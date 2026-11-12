@@ -37,6 +37,7 @@ The packages in the *Science / lab setups* section are published in the `science
 | --- | --- |
 | `devjam-system-config` | System-level configuration and systemd tweaks |
 | `devjam-system-config-lowlatency` | Low-latency system configuration |
+| `devjam-system-config-rtirq` | rtirq configuration with real-time IRQ priorities for audio, USB, parallel port and GPU (diverts `/etc/rtirq.conf`) |
 | `devjam-desktop-kernel-hardening` | Kernel hardening settings for desktops |
 | `devjam-cpu-powercap` | CPU power cap permission for reading power usage |
 | `devjam-sensors-asus-z790-plus-wifi` | Sensor configuration for the ASUS Z790-PLUS WIFI board |
@@ -87,7 +88,8 @@ The packages in the *Science / lab setups* section are published in the `science
 | Package | Purpose |
 | --- | --- |
 | `devjam-science-tools` | Tools for experimental lab setups |
-| `devjam-science-experiment-mode-rtirq` | Real-time IRQ tuning for experiment mode |
+| `devjam-science-experiment-mode` | Experiment mode: GRUB entries with isolated CPU cores, audio IRQ pinning, no irqbalance, `switch-rtirq` to start rtirq only in experiment mode (depends on `devjam-system-config-rtirq`) |
+| `devjam-science-experiment-mode-rtirq` | Transitional package for `devjam-science-experiment-mode` (split into it and `devjam-system-config-rtirq`) |
 | `devjam-science-opensesame-psychopy` | Settings and launch scripts for OpenSesame and PsychoPy |
 | `devjam-science-tools-matlab` | MATLAB (and Psychtoolbox) launchers and KDE service menus |
 | `devjam-science-kde-servicemenus` | KDE service menus for science, e.g. packing OpenSesame experiment folders into `.osexp` |

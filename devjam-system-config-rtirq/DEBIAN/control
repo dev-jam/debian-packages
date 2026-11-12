@@ -1,0 +1,18 @@
+Package: devjam-system-config-rtirq
+Version: 1.0-1
+Section: admin
+Priority: optional
+Architecture: all
+Depends: rtirq
+Breaks: devjam-science-experiment-mode-rtirq (<< 1.47-1~)
+Replaces: devjam-science-experiment-mode-rtirq (<< 1.47-1~)
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Real-time IRQ priorities (rtirq) for deterministic timing
+ rtirq configuration for computers with deterministic timing for
+ EEG, button boxes and audio-visual stimuli: audio, USB, parallel port
+ and Intel GPU interrupts get real-time priorities. /etc/rtirq.conf of
+ the rtirq package is diverted and replaced by this configuration.
+ Includes verify-rtirq and check-rt-processes to check the result.
+ .
+ Works on its own, without experiment mode. devjam-science-experiment-mode
+ can limit rtirq to experiment mode (switch-rtirq).

@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
+    if [ -d /run/systemd/system ]; then
+        # rtirq.service (rtirq package) reads /etc/rtirq.conf; restart it to
+        # apply the lab configuration. deb-systemd-invoke only (re)starts
+        # units that are enabled or running, and honours policy-rc.d.
+        deb-systemd-invoke restart 'rtirq.service' >/dev/null 2>&1 || true
+    fi
+fi
+
+exit 0

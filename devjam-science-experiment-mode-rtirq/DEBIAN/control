@@ -1,14 +1,13 @@
 Package: devjam-science-experiment-mode-rtirq
-Version: 1.46-1
-Section: science
+Version: 1.47-1
+Section: oldlibs
 Priority: optional
 Architecture: all
-Recommends: rtirq
+Depends: devjam-science-experiment-mode
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: Experiment mode with real-time IRQ priorities for lab timing
- Experiment mode for lab computers with deterministic timing for EEG,
- button boxes and audio-visual stimuli. It adds GRUB entries that
- isolate CPU cores, rtirq profiles for normal and experiment mode, a
- service that pins audio IRQs (internal and USB) to the isolated cores,
- and tools to switch and verify the setup (switch-rtirq, verify-rtirq,
- check-isolation, check-rt-processes, usb-affinity).
+Description: Transitional package for devjam-science-experiment-mode
+ This package has been split into devjam-science-experiment-mode
+ (experiment mode, including switch-rtirq) and
+ devjam-system-config-rtirq (the rtirq configuration, which can also be
+ installed without experiment mode). It pulls in both packages and can
+ be removed safely.
