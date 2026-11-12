@@ -5,10 +5,11 @@
 #
 # With OPENSESAME_CPUS=isolated (set by opensesame-psychopy-rt.service),
 # OpenSesame runs on the CPUs isolated with isolcpus= in experiment mode, so
-# it follows the CPU preset chosen in the GRUB menu. A CPU affinity that
-# already includes an isolated CPU (CPUAffinity= from
-# manage-opensesame-affinity) is kept as it is.
+# it follows the CPU preset chosen in the GRUB menu. A CPUAffinity= of the
+# service (set with manage-opensesame-affinity) wins. The inherited affinity
+# says nothing: the user service manager can have every CPU in it.
 VENV_DIR="/opt/psychopy/PsychoPy/.venv"
+SERVICE="opensesame-psychopy-rt.service"
 
 if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
     echo "Error: PsychoPy venv not found in $VENV_DIR" >&2
@@ -17,30 +18,10 @@ if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
 fi
 source "$VENV_DIR/bin/activate"
 
-# "2-4,7" -> "2 3 4 7"
-expand_cpus() {
-    local part cpu
-    local -a parts out=()
-    IFS=, read -ra parts <<< "$1"
-    for part in "${parts[@]}"; do
-        if [[ $part =~ ^([0-9]+)-([0-9]+)$ ]]; then
-            for ((cpu = BASH_REMATCH[1]; cpu <= BASH_REMATCH[2]; cpu++)); do
-                out+=("$cpu")
-            done
-        else
-            out+=("$part")
-        fi
-    done
-    echo "${out[*]}"
-}
-
 if [[ ${OPENSESAME_CPUS:-} == isolated ]]; then
     isolated=$(cat /sys/devices/system/cpu/isolated 2>/dev/null)
-    current=" $(expand_cpus "$(awk '/^Cpus_allowed_list:/ { print $2 }' /proc/self/status)") "
-    if [[ -n $isolated ]]; then
-        for cpu in $(expand_cpus "$isolated"); do
-            [[ $current == *" $cpu "* ]] && exec opensesame "$@"
-        done
+    fixed=$(systemctl --user show -p CPUAffinity --value "$SERVICE" 2>/dev/null)
+    if [[ -n $isolated && -z $fixed ]]; then
         exec taskset -c "$isolated" opensesame "$@"
     fi
 fi
