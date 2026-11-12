@@ -1,205 +1,202 @@
 #!/bin/bash
 # Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
-set -euo pipefail
+#
+# Checks the CPU isolation of experiment mode: the boot settings, the IRQs
+# that run on isolated CPUs, and per CPU the load and the interrupts per
+# second. A quiet isolated CPU shows almost no LOC (timer) and TIMER/RCU
+# softirqs, except while a program runs on it.
 
-RESET="\033[0m"
-CLEAR="\033[H\033[J"
+set -u
 
-INTERVAL=${1:-2}
-BAR_WIDTH=40
+usage() {
+    cat <<EOF
+Usage: ${0##*/} [-1] [SECONDS]
+  SECONDS   seconds between updates (default 2)
+  -1        print once and exit
+Environment: ABS_THRESHOLD (default 90) marks normal CPUs above this load red.
+EOF
+}
 
-# Configurable thresholds via environment variables
-ABS_THRESHOLD=${ABS_THRESHOLD:-90}       # Absolute CPU usage % for red color
-TOP10_PERCENT=${TOP10_PERCENT:-10}      # Top N% busy non-isolated CPUs for red color
+ONCE=0
+INTERVAL=2
+for arg in "$@"; do
+    case "$arg" in
+        -1|--once) ONCE=1 ;;
+        -h|--help) usage; exit 0 ;;
+        *[!0-9]*|""|0) usage >&2; exit 2 ;;
+        *) INTERVAL=$arg ;;
+    esac
+done
+ABS_THRESHOLD=${ABS_THRESHOLD:-90}
+BAR_WIDTH=30
 
-GREEN="\033[0;32m"
-YELLOW="\033[1;33m"
-RED="\033[0;31m"
+if [[ -t 1 && -z ${NO_COLOR:-} ]]; then
+    GREEN=$'\e[32m' YELLOW=$'\e[33m' RED=$'\e[31m' BOLD=$'\e[1m' RESET=$'\e[0m' CLEAR=$'\e[H\e[J'
+else
+    GREEN="" YELLOW="" RED="" BOLD="" RESET="" CLEAR=""
+fi
+[ "$ONCE" = 1 ] && CLEAR=""
 
-CATEGORIES=(TIMER NET_RX BLOCK RCU)
-declare -A prev_total
-declare -A prev_idle
-
-# Expand isolcpus ranges like 2-5,7
+# "2-4,7" -> "2 3 4 7"
 expand_cpus() {
-    local result=()
-    IFS=',' read -ra parts <<< "$1"
-    for p in "${parts[@]}"; do
-        if [[ "$p" =~ ^([0-9]+)-([0-9]+)$ ]]; then
-            for ((i=${BASH_REMATCH[1]}; i<=${BASH_REMATCH[2]}; i++)); do
-                result+=("$i")
+    local part cpu
+    local -a parts out=()
+    IFS=, read -ra parts <<< "$1"
+    for part in "${parts[@]}"; do
+        if [[ $part =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            for ((cpu = BASH_REMATCH[1]; cpu <= BASH_REMATCH[2]; cpu++)); do
+                out+=("$cpu")
             done
-        else
-            result+=("$p")
+        elif [[ $part =~ ^[0-9]+$ ]]; then
+            out+=("$part")
         fi
     done
-    echo "${result[@]}"
+    echo "${out[*]}"
 }
 
-# Gradient function for bars
-color_gradient() {
-    local pct=$1
-    local r g b
-    if [ $pct -le 50 ]; then
-        r=$((255 * pct / 50))
-        g=255
-        b=0
-    else
-        r=255
-        g=$((255 - 255 * (pct-50) / 50))
-        b=0
+# --- Boot settings (do not change while running) ---
+
+CMDLINE=" $(cat /proc/cmdline) "
+ISOLATED=$(cat /sys/devices/system/cpu/isolated 2>/dev/null)
+NOHZ_FULL=$(cat /sys/devices/system/cpu/nohz_full 2>/dev/null)
+[ "$NOHZ_FULL" = "(null)" ] && NOHZ_FULL=""
+declare -A IS_ISOLATED=()
+for cpu in $(expand_cpus "$ISOLATED"); do IS_ISOLATED[$cpu]=1; done
+
+param() {  # value of a kernel parameter, or "-"
+    local value
+    value=$(grep -oE " $1=[^ ]*" <<< "$CMDLINE" | tail -n 1)
+    value=${value#*=}
+    echo "${value:--}"
+}
+
+settings() {
+    local warn=() mode=normal threaded=no unit state w
+    [[ $CMDLINE == *" experiment_mode=1 "* ]] && mode=experiment
+    if [[ $(uname -v) == *PREEMPT_RT* ]]; then
+        threaded="yes (PREEMPT_RT)"
+    elif [[ $CMDLINE == *" threadirqs "* ]]; then
+        threaded="yes (threadirqs)"
     fi
-    printf "\033[38;2;%d;%d;%dm" $r $g $b
+
+    echo "${BOLD}Mode:${RESET} $mode    ${BOLD}Kernel:${RESET} $(uname -r)    ${BOLD}Threaded IRQs:${RESET} $threaded"
+    echo "${BOLD}Isolated (isolcpus):${RESET} ${ISOLATED:--}    ${BOLD}nohz_full:${RESET} ${NOHZ_FULL:--}    ${BOLD}irqaffinity:${RESET} $(param irqaffinity)"
+    for unit in irqbalance rtirq auto-pin-audio; do
+        state=$(systemctl is-active "$unit.service" 2>/dev/null)
+        printf '%s%s:%s %s  ' "$BOLD" "$unit" "$RESET" "${state:-unknown}"
+    done
+    echo
+
+    if [ -n "$ISOLATED" ] && systemctl is-active --quiet irqbalance.service 2>/dev/null; then
+        warn+=("irqbalance runs and moves pinned IRQs off the isolated CPUs")
+    fi
+    if [[ $CMDLINE == *" nohz_full="* ]] && [ -z "$NOHZ_FULL" ]; then
+        warn+=("nohz_full= is set but not active: kernel without CONFIG_NO_HZ_FULL?")
+    fi
+    if [ "$mode" = experiment ] && [ "$threaded" = no ]; then
+        warn+=("no threaded IRQs, so rtirq has no IRQ threads to prioritize")
+    fi
+    for w in "${warn[@]}"; do echo "${RED}Warning:${RESET} $w"; done
 }
 
-ISOLATED_CPUS_RAW=$(grep -oP '(?<=isolcpus=)[0-9,-]+' /proc/cmdline || echo "")
-ISOLATED_CPUS=($(expand_cpus "$ISOLATED_CPUS_RAW"))
+# IRQs whose (effective) affinity includes an isolated CPU.
+isolated_irqs() {
+    local dir irq cpus cpu name list=""
+    for dir in /proc/irq/[0-9]*; do
+        irq=${dir##*/}
+        cpus=$(cat "$dir/effective_affinity_list" 2>/dev/null || cat "$dir/smp_affinity_list" 2>/dev/null)
+        for cpu in $(expand_cpus "$cpus"); do
+            if [ -n "${IS_ISOLATED[$cpu]:-}" ]; then
+                name=$(awk -v irq="$irq:" '$1 == irq { print $NF }' /proc/interrupts)
+                [ -n "$name" ] && list+="  IRQ $irq ($name) -> CPU $cpus"$'\n'
+                break
+            fi
+        done
+    done
+    echo "${BOLD}IRQs on isolated CPUs:${RESET} ${list:+$'\n'}${list:-none}"
+}
 
+# --- Counters ---
+
+# One line per CPU: cpu busy total devirq loc timer rcu net_rx block
+sample() {
+    awk '
+        FILENAME == "/proc/stat" && /^cpu[0-9]+ / {
+            cpu = substr($1, 4); total = 0
+            for (i = 2; i <= 9; i++) total += $i     # user .. steal
+            busy[cpu] = total - $5 - $6; tot[cpu] = total; n = cpu + 1
+        }
+        FILENAME == "/proc/interrupts" {
+            if (FNR == 1) { ncol = NF; next }
+            label = $1; sub(":", "", label)
+            for (c = 0; c < ncol; c++) {
+                if (label ~ /^[0-9]+$/) dev[c] += $(c + 2)
+                else if (label == "LOC") loc[c] = $(c + 2)
+            }
+        }
+        FILENAME == "/proc/softirqs" {
+            if (FNR == 1) next
+            label = $1; sub(":", "", label)
+            for (c = 0; c < NF - 1; c++) soft[label, c] = $(c + 2)
+        }
+        END {
+            for (c = 0; c < n; c++)
+                print c, busy[c], tot[c], dev[c] + 0, loc[c] + 0, soft["TIMER", c] + 0,
+                      soft["RCU", c] + 0, soft["NET_RX", c] + 0, soft["BLOCK", c] + 0
+        }' /proc/stat /proc/interrupts /proc/softirqs
+}
+
+# Bars with a green-to-red gradient, made once.
+BARS=("")
+for ((i = 1; i <= BAR_WIDTH; i++)); do
+    pct=$((i * 100 / BAR_WIDTH))
+    if [ -n "$RESET" ]; then
+        if ((pct <= 50)); then r=$((255 * pct / 50)) g=255; else r=255 g=$((255 - 255 * (pct - 50) / 50)); fi
+        BARS[i]="${BARS[i - 1]}"$'\e[38;2;'"$r;$g;0m#"
+    else
+        BARS[i]="${BARS[i - 1]}#"
+    fi
+done
+
+table() {
+    local -a now prev
+    local cpu busy total line color label dt i
+    local -A old=()
+    while read -r line; do old[${line%% *}]=$line; done <<< "$1"
+    dt=$3
+
+    printf "%s%-6s %5s %8s %8s %8s %8s %8s %8s%s\n" "$BOLD" CPU Load IRQ/s LOC/s TIMER/s RCU/s NET_RX/s BLOCK/s "$RESET"
+    while read -r line; do
+        read -ra now <<< "$line"
+        read -ra prev <<< "${old[${now[0]}]}"
+        cpu=${now[0]}
+        total=$((now[2] - prev[2]))
+        busy=0
+        ((total > 0)) && busy=$((100 * (now[1] - prev[1]) / total))
+        color=$GREEN label=CPU$cpu
+        if [ -n "${IS_ISOLATED[$cpu]:-}" ]; then
+            color=$YELLOW label="CPU$cpu*"
+        elif ((busy >= ABS_THRESHOLD)); then
+            color=$RED
+        fi
+        printf "%s%-6s%s %4d%%" "$color" "$label" "$RESET" "$busy"
+        for i in 3 4 5 6 7 8; do
+            printf " %8d" $(((now[i] - prev[i]) / dt))
+        done
+        printf " |%s%s\n" "${BARS[busy * BAR_WIDTH / 100]}" "$RESET"
+    done <<< "$2"
+    echo "${YELLOW}CPU*${RESET} = isolated   ${RED}red${RESET} = normal CPU at ${ABS_THRESHOLD}% load or more   (per second, over ${dt}s)"
+}
+
+prev_sample=$(sample)
 while true; do
-    echo -ne "$CLEAR"
-
-    # ====================
-    # Total system load
-    # ====================
-    total_sum=0
-    cpu_count=0
-    while read -r line; do
-        [[ "$line" =~ ^cpu([0-9]+)\ (.*) ]] || continue
-        cpu="${BASH_REMATCH[1]}"
-        stats=(${BASH_REMATCH[2]})
-        idle_time=${stats[3]}
-        total_time=0
-        for s in "${stats[@]}"; do total_time=$((total_time + s)); done
-
-        if [[ -n "${prev_total[$cpu]:-}" ]]; then
-            delta_total=$((total_time - prev_total[$cpu]))
-            delta_idle=$((idle_time - prev_idle[$cpu]))
-            usage=$((delta_total>0 ? (100*(delta_total-delta_idle)/delta_total) : 0))
-            total_sum=$((total_sum + usage))
-            cpu_count=$((cpu_count + 1))
-        fi
-        prev_total[$cpu]=$total_time
-        prev_idle[$cpu]=$idle_time
-    done < /proc/stat
-
-    total_load=0
-    [ $cpu_count -gt 0 ] && total_load=$((total_sum / cpu_count))
-
-    bar_count=$(( total_load * BAR_WIDTH / 100 ))
-    bar=""
-    for ((i=1;i<=bar_count;i++)); do
-        pct=$(( i * 100 / BAR_WIDTH ))
-        bar+=$(color_gradient $pct)"#"
-    done
-    printf "%-6s %6d%% |%s%b\n\n" "SYS" "$total_load" "$bar" "$RESET"
-
-    # ====================
-    # Header
-    # ====================
-    echo "Isolated CPUs: ${ISOLATED_CPUS[*]}"
-    echo "============================================================"
-    printf "%-6s %6s %10s %10s %10s %10s %10s %s\n" "CPU" "Load" "${CATEGORIES[@]}" "Total" "Bar"
-    echo "------------------------------------------------------------"
-
-    # ====================
-    # /proc/softirqs parsing
-    # ====================
-    declare -A cpu_vals
-    declare -A cpu_total
-    NUM_CPUS=$(grep -c '^cpu[0-9]\+' /proc/stat)
-
-    while read -r line; do
-        [[ "$line" =~ ^[[:space:]]*([A-Z0-9_]+): ]] || continue
-        cat_name="${BASH_REMATCH[1]}"
-        vals=($(echo "$line" | cut -d: -f2 | xargs))
-        for cpu in "${!vals[@]}"; do
-            for c in "${CATEGORIES[@]}"; do
-                [[ "$cat_name" == "$c" ]] && cpu_vals["$cpu,$c"]=${vals[$cpu]}
-            done
-            cpu_total[$cpu]=$(( ${cpu_total[$cpu]:-0} + ${vals[$cpu]} ))
-        done
-    done < /proc/softirqs
-
-    # ====================
-    # Per-CPU usage
-    # ====================
-    declare -A cpu_usage
-    for cpu in $(seq 0 $((NUM_CPUS-1))); do cpu_usage[$cpu]=0; done
-    while read -r line; do
-        [[ "$line" =~ ^cpu([0-9]+)\ (.*) ]] || continue
-        cpu="${BASH_REMATCH[1]}"
-        stats=(${BASH_REMATCH[2]})
-        idle_time=${stats[3]}
-        total_time=0
-        for s in "${stats[@]}"; do total_time=$((total_time + s)); done
-
-        if [[ -n "${prev_total[$cpu]:-}" ]]; then
-            delta_total=$((total_time - prev_total[$cpu]))
-            delta_idle=$((idle_time - prev_idle[$cpu]))
-            usage=$((delta_total>0 ? (100*(delta_total-delta_idle)/delta_total) : 0))
-            cpu_usage[$cpu]=$usage
-        fi
-        prev_total[$cpu]=$total_time
-        prev_idle[$cpu]=$idle_time
-    done < /proc/stat
-
-    # ====================
-    # Determine top N% busy non-isolated CPUs
-    # ====================
-    TOTALS=()
-    NON_ISOLATED=()
-    for cpu in $(seq 0 $((NUM_CPUS-1))); do
-        [[ " ${ISOLATED_CPUS[*]} " =~ " $cpu " ]] && continue
-        TOTALS+=("${cpu_usage[$cpu]:-0}")
-        NON_ISOLATED+=("$cpu")
-    done
-
-    RED_CPUS=()
-    for cpu in "${NON_ISOLATED[@]}"; do
-        [[ "${cpu_usage[$cpu]:-0}" -ge $ABS_THRESHOLD ]] && RED_CPUS+=("$cpu")
-    done
-
-    if [ ${#RED_CPUS[@]} -eq 0 ] && [ ${#TOTALS[@]} -gt 0 ]; then
-        TOPN_COUNT=$(( (${#TOTALS[@]} * TOP10_PERCENT + 99) / 100 ))
-        [ $TOPN_COUNT -lt 1 ] && TOPN_COUNT=1
-        SORTED_TOTALS=($(printf "%s\n" "${TOTALS[@]}" | sort -nr))
-        THRESHOLD=${SORTED_TOTALS[$((TOPN_COUNT-1))]:-0}
-    else
-        THRESHOLD=101
-    fi
-
-    # ====================
-    # Print per-CPU
-    # ====================
-    for cpu in $(seq 0 $((NUM_CPUS-1))); do
-        total=${cpu_total[$cpu]:-0}
-        usage=${cpu_usage[$cpu]:-0}
-
-        color="$GREEN"
-        [[ " ${ISOLATED_CPUS[*]} " =~ " $cpu " ]] && color="$YELLOW"
-        [[ ! " ${ISOLATED_CPUS[*]} " =~ " $cpu " && $usage -ge $ABS_THRESHOLD ]] && color="$RED"
-        [[ ! " ${ISOLATED_CPUS[*]} " =~ " $cpu " && $usage -ge $THRESHOLD ]] && color="$RED"
-
-        printf "%b%-6s%b %6d%%" "$color" "CPU$cpu" "$RESET" "$usage"
-
-        for c in "${CATEGORIES[@]}"; do
-            printf " %10d" "${cpu_vals[$cpu,$c]:-0}"
-        done
-
-        # Gradient bar
-        bar_count=$(( usage * BAR_WIDTH / 100 ))
-        bar=""
-        for ((i=1;i<=bar_count;i++)); do
-            pct=$(( i * 100 / BAR_WIDTH ))
-            bar+=$(color_gradient $pct)"#"
-        done
-        printf " %10d |%s%b\n" "$total" "$bar" "$RESET"
-    done
-
-    echo -e "\n$GREEN Green = Normal CPU(s) $RESET"
-    echo -e "$YELLOW Yellow = Isolated CPU(s) $RESET"
-    echo -e "$RED Red = >$ABS_THRESHOLD% usage or Top $TOP10_PERCENT% busy non-isolated CPU(s) $RESET"
-
     sleep "$INTERVAL"
+    now_sample=$(sample)
+    frame="$(settings)"$'\n'
+    [ -n "$ISOLATED" ] && frame+="$(isolated_irqs)"$'\n'
+    frame+=$'\n'"$(table "$prev_sample" "$now_sample" "$INTERVAL")"
+    printf '%s%s\n' "$CLEAR" "$frame"
+    [ "$ONCE" = 1 ] && exit 0
+    prev_sample=$now_sample
 done
