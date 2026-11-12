@@ -1,7 +1,48 @@
 #!/usr/bin/env bash
 # Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Wrapper that activates the venv, then starts OpenSesame
+# Wrapper that activates the venv, then starts OpenSesame.
+#
+# With OPENSESAME_CPUS=isolated (set by opensesame-psychopy-rt.service),
+# OpenSesame runs on the CPUs isolated with isolcpus= in experiment mode, so
+# it follows the CPU preset chosen in the GRUB menu. A CPU affinity that
+# already includes an isolated CPU (CPUAffinity= from
+# manage-opensesame-affinity) is kept as it is.
 VENV_DIR="/opt/psychopy/PsychoPy/.venv"
+
+if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
+    echo "Error: PsychoPy venv not found in $VENV_DIR" >&2
+    echo "       Install it with install-psychopy-opensesame." >&2
+    exit 1
+fi
 source "$VENV_DIR/bin/activate"
+
+# "2-4,7" -> "2 3 4 7"
+expand_cpus() {
+    local part cpu
+    local -a parts out=()
+    IFS=, read -ra parts <<< "$1"
+    for part in "${parts[@]}"; do
+        if [[ $part =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            for ((cpu = BASH_REMATCH[1]; cpu <= BASH_REMATCH[2]; cpu++)); do
+                out+=("$cpu")
+            done
+        else
+            out+=("$part")
+        fi
+    done
+    echo "${out[*]}"
+}
+
+if [[ ${OPENSESAME_CPUS:-} == isolated ]]; then
+    isolated=$(cat /sys/devices/system/cpu/isolated 2>/dev/null)
+    current=" $(expand_cpus "$(awk '/^Cpus_allowed_list:/ { print $2 }' /proc/self/status)") "
+    if [[ -n $isolated ]]; then
+        for cpu in $(expand_cpus "$isolated"); do
+            [[ $current == *" $cpu "* ]] && exec opensesame "$@"
+        done
+        exec taskset -c "$isolated" opensesame "$@"
+    fi
+fi
+
 exec opensesame "$@"

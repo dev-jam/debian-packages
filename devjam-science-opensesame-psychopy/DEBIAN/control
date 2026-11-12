@@ -9,7 +9,9 @@ Description: OpenSesame Launcher with PsychoPy
  Desktop launchers for OpenSesame, PsychoPy, PsychoPy Studio and Sigmund
  Analyst in the PsychoPy environment in /opt/psychopy, including an
  OpenSesame launcher that runs as a user service with real-time
- priority, and manage-opensesame-affinity to set its CPU affinity.
+ priority. In experiment mode (devjam-science-experiment-mode) that
+ OpenSesame runs on the isolated CPU cores; manage-opensesame-affinity
+ sets other CPUs.
  .
  opensesamerun-psychopy runs an experiment without the GUI, as a
  replacement for opensesamerun, which no longer works in OpenSesame 4.1.

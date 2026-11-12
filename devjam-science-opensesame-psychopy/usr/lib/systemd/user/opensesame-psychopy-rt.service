@@ -1,16 +1,24 @@
 [Unit]
 Description=OpenSesame (with RT priority)
+# Started by the "OpenSesame ... (RT Priority)" desktop entry.
 
 [Service]
-# Forward any arguments to OpenSesame
-ExecStart=/bin/bash -c 'source /opt/psychopy/PsychoPy/.venv/bin/activate; exec opensesame "$@"' --
+ExecStart=/usr/bin/opensesame-psychopy-launch
+# In experiment mode OpenSesame runs on the isolated CPUs of the boot (see
+# opensesame-psychopy-launch). manage-opensesame-affinity sets fixed CPUs
+# instead.
+Environment=OPENSESAME_CPUS=isolated
 CPUSchedulingPolicy=rr
 CPUSchedulingPriority=40
+# The user manager can only use the user's own limits:
+# devjam-system-config-lowlatency gives the audio group rtprio 95 and
+# unlimited memlock. Without a real-time limit the policy cannot be set and
+# the service does not start (journalctl --user -u opensesame-psychopy-rt).
 LimitRTPRIO=95
 LimitMEMLOCK=infinity
+StandardInput=null
 StandardOutput=journal
 StandardError=journal
-StandardInput=null
 
 [Install]
 WantedBy=default.target
