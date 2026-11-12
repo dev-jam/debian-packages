@@ -1,123 +1,114 @@
 #!/bin/bash
 # Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
-# USB tree with host controller IRQs, CPU affinities, and device hierarchy
-# Corrected to preserve formatting and spacing
+#
+# USB host controllers with their IRQs, the CPUs those IRQs may run on and
+# the devices behind each controller; optionally pins a controller's IRQs.
+# A USB device has no IRQ of its own: it uses the IRQ(s) of its controller.
 
-# --- Functions ---
+set -u
 
-# Get PCI IRQ number for a USB controller
-get_controller_irq() {
-    local ctrl="$1"
-    local path=$(readlink -f "$ctrl")            # e.g. /sys/devices/pci0000:00/0000:00:14.0/usb1
-    local pci=$(basename "$(dirname "$path")")  # parent directory of usbX
-    if [ -f "/sys/bus/pci/devices/$pci/irq" ]; then
-        cat "/sys/bus/pci/devices/$pci/irq"
+usage() {
+    cat <<EOF
+Usage: ${0##*/}                 show the USB controllers, IRQs and devices
+       ${0##*/} usbN CPU-LIST   pin the IRQs of the controller of bus usbN
+                                to CPU-LIST (e.g. usb1 2,3), needs root
+The pinning lasts until reboot. irqbalance, when it runs, moves it again.
+EOF
+}
+
+# PCI address of the controller of a bus (usb1 -> 0000:00:14.0)
+controller_of() {
+    local path
+    path=$(readlink -f "/sys/bus/usb/devices/$1") || return 1
+    basename "$(dirname "$path")"
+}
+
+# IRQs of a PCI device: its MSI/MSI-X vectors, else its legacy IRQ.
+pci_irqs() {
+    local dev="/sys/bus/pci/devices/$1"
+    if [ -n "$(ls -A "$dev/msi_irqs" 2>/dev/null)" ]; then
+        ls "$dev/msi_irqs" | sort -n
+    elif [ "$(cat "$dev/irq" 2>/dev/null || echo 0)" != 0 ]; then
+        cat "$dev/irq"
     fi
 }
 
-# Print IRQ info: CPU affinity, mask, interrupts
-print_irq_info() {
-    local irq="$1"
-    [ -z "$irq" ] && return
-
-    echo "  IRQ: $irq"
-
-    # CPUs allowed
-    [ -f "/proc/irq/$irq/smp_affinity_list" ] && echo "    CPUs allowed : $(cat /proc/irq/$irq/smp_affinity_list)"
-    [ -f "/proc/irq/$irq/smp_affinity" ] && echo "    Affinity mask: $(cat /proc/irq/$irq/smp_affinity)"
-
-    # Process /proc/interrupts safely
-    local line driver
-    line=$(grep -E "^[[:space:]]*$irq:" /proc/interrupts)
-    [ -n "$line" ] || return
-
-    # Extract driver name (last field)
-    driver=$(echo "$line" | awk '{print $NF}')
-
-    # Extract numeric columns (ignore first column and any non-numeric)
-    # Using awk to iterate only over numeric per-CPU counts
-    echo "    Interrupts   :"
-    awk -v drv="$driver" '
-        {
-            for(i=2;i<=NF-1;i++) {
-                if ($i ~ /^[0-9]+$/ && $i != "0") {
-                    printf "      CPU%d: %s\n", i-2, $i
-                }
-            }
-            print "      Driver: " drv
-        }' <<< "$line"
+irq_info() {
+    local irq="$1" counts
+    counts=$(awk -v irq="$irq:" '
+        NR == 1 { ncpu = NF; next }
+        $1 == irq { for (c = 0; c < ncpu; c++) if ($(c + 2) > 0) printf " CPU%d=%s", c, $(c + 2) }' /proc/interrupts)
+    echo "  IRQ $irq: allowed CPUs $(cat "/proc/irq/$irq/smp_affinity_list" 2>/dev/null)," \
+        "runs on $(cat "/proc/irq/$irq/effective_affinity_list" 2>/dev/null || echo "?")"
+    echo "    interrupts:${counts:- none}"
 }
 
-
-
-# Recursively print USB devices in tree
-print_device_tree() {
-    local dev="$1"
-    local indent="$2"
-    local irq="$3"
-
-    [ -e "$dev/product" ] || return
-    local id=$(basename "$dev")
-    local product=$(cat "$dev/product" 2>/dev/null)
-    local vendor=$(cat "$dev/manufacturer" 2>/dev/null)
-
-    echo "${indent}${id} : $product ($vendor) [IRQ: $irq]"
-
-    for child in "$dev"/*; do
-        [ -d "$child" ] || continue
-        [[ "$(basename "$child")" =~ ^[0-9]+(-[0-9.]+)*$ ]] || continue
-        print_device_tree "$child" "$indent  " "$irq"
+# Prints a device and its children; the drivers of its interfaces show
+# what it is (snd-usb-audio, usbhid, ftdi_sio, ...).
+device_tree() {
+    local dev="$1" indent="$2" child drivers="" intf driver
+    for intf in "$dev"/*:*; do
+        [ -e "$intf/driver" ] || continue
+        driver=$(basename "$(readlink "$intf/driver")")
+        [[ " $drivers " == *" $driver "* ]] || drivers+=" $driver"
+    done
+    printf '%s%s: %s %s [%s Mb/s]%s\n' "$indent" "$(basename "$dev")" \
+        "$(cat "$dev/manufacturer" 2>/dev/null)" "$(cat "$dev/product" 2>/dev/null)" \
+        "$(cat "$dev/speed" 2>/dev/null)" "${drivers:+ (${drivers# })}"
+    for child in "$dev"/[0-9]*-*; do
+        [[ $(basename "$child") =~ ^[0-9]+-[0-9.]+$ ]] && device_tree "$child" "$indent  "
     done
 }
 
-# Show all USB controllers with IRQ info and attached devices
-show_usb_tree() {
-    echo "USB Controllers and attached devices"
-    echo "==================================="
-
-    for ctrl in /sys/bus/usb/devices/usb*; do
-        [ -d "$ctrl" ] || continue
-        local ctrlid=$(basename "$ctrl")
-        echo "Controller: $ctrlid"
-
-        local IRQ=$(get_controller_irq "$ctrl")
-        print_irq_info "$IRQ"
-
-        echo "  Devices attached:"
-        for child in "$ctrl"/*; do
-            [ -d "$child" ] || continue
-            [[ "$(basename "$child")" =~ ^[0-9]+(-[0-9.]+)*$ ]] || continue
-            print_device_tree "$child" "    " "$IRQ"
+show() {
+    local bus pci irq child
+    local -A buses=()
+    for bus in /sys/bus/usb/devices/usb*; do
+        [ -e "$bus" ] || continue
+        pci=$(controller_of "$(basename "$bus")")
+        buses[$pci]+=" $(basename "$bus")"
+    done
+    for pci in $(printf '%s\n' "${!buses[@]}" | sort); do
+        echo "Controller $pci ($(basename "$(readlink "/sys/bus/pci/devices/$pci/driver" 2>/dev/null)")), buses:${buses[$pci]}"
+        for irq in $(pci_irqs "$pci"); do irq_info "$irq"; done
+        for bus in ${buses[$pci]}; do
+            for child in /sys/bus/usb/devices/"$bus"/[0-9]*-*; do
+                [[ $(basename "$child") =~ ^[0-9]+-[0-9.]+$ ]] && device_tree "$child" "    "
+            done
         done
         echo
     done
 }
 
-# Pin a controller IRQ to specific CPUs
-pin_controller() {
-    local ctrl="$1"
-    local cpus="$2"
-    local ctrl_path="/sys/bus/usb/devices/$ctrl"
-
-    local IRQ=$(get_controller_irq "$ctrl_path")
-    [ -z "$IRQ" ] && { echo "Error: Cannot determine IRQ for $ctrl"; exit 1; }
-
-    echo "Pinning controller $ctrl (IRQ $IRQ) to CPUs: $cpus"
-    echo "$cpus" | sudo tee /proc/irq/$IRQ/smp_affinity_list > /dev/null
+pin() {
+    local bus="$1" cpus="$2" pci irq
+    if [[ ! $cpus =~ ^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$ ]]; then
+        echo "Invalid CPU list: $cpus" >&2
+        exit 2
+    fi
+    if [ ! -e "/sys/bus/usb/devices/$bus" ] || [[ $bus != usb* ]]; then
+        echo "No USB bus $bus (see ${0##*/} without arguments)" >&2
+        exit 2
+    fi
+    pci=$(controller_of "$bus")
+    for irq in $(pci_irqs "$pci"); do
+        echo "Pinning IRQ $irq of controller $pci ($bus) to CPUs $cpus"
+        if [ "$EUID" -eq 0 ]; then
+            echo "$cpus" > "/proc/irq/$irq/smp_affinity_list"
+        else
+            echo "$cpus" | sudo tee "/proc/irq/$irq/smp_affinity_list" > /dev/null
+        fi || echo "  failed (managed IRQ, or a CPU that does not exist?)"
+    done
+    if systemctl is-active --quiet irqbalance.service 2>/dev/null; then
+        echo "Note: irqbalance runs and may move these IRQs again."
+    fi
+    echo
 }
 
-# --- Main ---
-
-if [ $# -eq 0 ]; then
-    show_usb_tree
-elif [ $# -eq 2 ]; then
-    pin_controller "$1" "$2"
-    echo
-    show_usb_tree
-else
-    echo "Usage:"
-    echo "  $0                 → show USB tree with controller IRQs and CPU affinities"
-    echo "  $0 usbX <cpus>     → pin controller IRQs to CPUs (e.g. usb1 2,3)"
-    exit 1
-fi
+case "$#:${1:-}" in
+    0:) show ;;
+    1:-h|1:--help) usage ;;
+    2:usb*) pin "$1" "$2"; show ;;
+    *) usage >&2; exit 2 ;;
+esac
