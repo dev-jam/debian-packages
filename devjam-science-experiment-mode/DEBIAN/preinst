@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+# Up to version 1.0-1, update-grub-custom-experiment-mode wrote the menu
+# entries to /etc/grub.d/11_experiment_mode, and two kernel hooks ran it.
+# That path is now a conffile of this package and the hooks are gone: the
+# entries are made during update-grub itself.
+case "$1" in
+    install|upgrade)
+        # Remove the generated file, so that dpkg does not take it for a
+        # locally changed conffile and ask what to keep.
+        f=/etc/grub.d/11_experiment_mode
+        if [ -f "$f" ] && ! dpkg-query -S "$f" >/dev/null 2>&1 \
+            && grep -q 'Adding Experiment Mode GRUB entries' "$f"; then
+            rm -f "$f"
+        fi
+        ;;
+esac
+
+dpkg-maintscript-helper rm_conffile /etc/kernel/postinst.d/99-grub-experiment-mode 1.1-1~ -- "$@"
+dpkg-maintscript-helper rm_conffile /etc/kernel/postrm.d/99-grub-experiment-mode 1.1-1~ -- "$@"
+
+exit 0

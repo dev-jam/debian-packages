@@ -1,0 +1,219 @@
+#!/bin/bash
+# Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Experiment mode entries for the GRUB menu. Run by grub-mkconfig
+# (update-grub) through /etc/grub.d/11_experiment_mode.
+#
+# For every CPU preset, /etc/grub.d/10_linux runs once more with the
+# experiment mode kernel parameters added to GRUB_CMDLINE_LINUX_DEFAULT.
+# The entries therefore boot exactly like the normal Linux entries (root
+# device, separate /boot, LVM, LUKS, btrfs, initrd, GRUB_CMDLINE_LINUX), and
+# kernels show up or disappear with every update-grub, which the kernel
+# packages already run.
+#
+# Menu:
+#   <OS> - Experiment mode, 6 isolated CPUs (2-7)      default preset
+#   Advanced options for <OS> - Experiment mode, ...   all kernels
+#   Experiment mode, other CPU presets                 per other preset: an
+#                                                      entry and a kernel menu
+#
+# Kernel parameters of a preset with CPUs 2-7 on a 16 CPU system:
+#   isolcpus=managed_irq,domain,2-7  no scheduling or managed IRQs on 2-7
+#   nohz_full=2-7 rcu_nocbs=2-7      no timer tick or RCU callbacks on 2-7
+#   irqaffinity=0-1,8-15             other IRQs start on the other CPUs
+#   experiment_mode=1                switch for the systemd units
+#
+# Settings, in /etc/default/grub.d/11_experiment_mode_defaults.cfg:
+#   ENABLE_EXPERIMENT_MODE        "true" adds the entries
+#   EXPERIMENT_MODE_CPU_PRESETS   CPU lists separated by spaces, one per
+#                                 preset (default "2,3 2-5 2-7"); a preset
+#                                 without isolated CPUs is always added
+#   DEFAULT_NR_ISO_CPU            number of CPUs of the preset at the top
+#                                 level (default 6; 0 = no isolated CPUs)
+#   GRUB_EXPERIMENT_MODE_DEFAULT  extra kernel parameters, e.g. "threadirqs"
+
+set -o pipefail
+
+LINUX_SCRIPT=/etc/grub.d/10_linux
+
+warn() { echo "Experiment mode: $*" >&2; }
+
+# Settings and their defaults. grub-mkconfig sources the same files, but
+# only exports its own GRUB_* variables to the scripts in /etc/grub.d.
+ENABLE_EXPERIMENT_MODE=true
+EXPERIMENT_MODE_CPU_PRESETS="2,3 2-5 2-7"
+DEFAULT_NR_ISO_CPU=6
+GRUB_EXPERIMENT_MODE_DEFAULT=""
+for f in /etc/default/grub /etc/default/grub.d/*.cfg; do
+    # shellcheck disable=SC1090
+    if [ -f "$f" ]; then . "$f"; fi
+done
+set -u
+
+[ "$ENABLE_EXPERIMENT_MODE" = true ] || exit 0
+
+if [ ! -f "$LINUX_SCRIPT" ]; then
+    warn "$LINUX_SCRIPT not found, no entries added"
+    exit 0
+fi
+
+# --- CPU lists ("0-3,8" <-> "0 1 2 3 8") ---
+
+expand_cpus() {
+    local part cpu
+    local -a parts out=()
+    IFS=, read -ra parts <<< "$1"
+    for part in "${parts[@]}"; do
+        if [[ $part =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            for ((cpu = BASH_REMATCH[1]; cpu <= BASH_REMATCH[2]; cpu++)); do
+                out+=("$cpu")
+            done
+        else
+            out+=("$part")
+        fi
+    done
+    echo "${out[*]}"
+}
+
+compress_cpus() {
+    local cpu start="" prev="" list=""
+    for cpu in $1 ""; do
+        if [ -n "$prev" ] && [ "$cpu" = "$((prev + 1))" ]; then
+            prev=$cpu
+            continue
+        fi
+        if [ -n "$start" ]; then
+            if [ "$start" = "$prev" ]; then list+=",$start"; else list+=",$start-$prev"; fi
+        fi
+        start=$cpu prev=$cpu
+    done
+    echo "${list#,}"
+}
+
+ALL_CPUS=$(expand_cpus "$(cat /sys/devices/system/cpu/present)")
+
+# Prints the CPUs that are not in the preset, or fails for an invalid one.
+check_preset() {
+    local preset="$1" cpu sibling isolated hk=""
+
+    if [[ ! $preset =~ ^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$ ]]; then
+        warn "invalid CPU list '$preset', preset skipped"
+        return 1
+    fi
+    isolated=" $(expand_cpus "$preset") "
+    for cpu in $isolated; do
+        if [[ " $ALL_CPUS " != *" $cpu "* ]]; then
+            warn "CPU $cpu of preset $preset does not exist, preset skipped"
+            return 1
+        fi
+    done
+    if [[ $isolated == *" 0 "* ]]; then
+        # nohz_full never applies to the boot CPU, which keeps the time.
+        warn "CPU 0 cannot be isolated, preset $preset skipped"
+        return 1
+    fi
+    for cpu in $isolated; do
+        # An isolated CPU still shares its core with its SMT sibling.
+        for sibling in $(expand_cpus "$(cat "/sys/devices/system/cpu/cpu$cpu/topology/thread_siblings_list" 2>/dev/null || echo "$cpu")"); do
+            [[ $isolated == *" $sibling "* ]] ||
+                warn "preset $preset: CPU $cpu shares a core with CPU $sibling, which is not isolated"
+        done
+    done
+    for cpu in $ALL_CPUS; do
+        [[ $isolated == *" $cpu "* ]] || hk+=" $cpu"
+    done
+    compress_cpus "$hk"
+}
+
+# --- Presets ---
+
+declare -A PARAMS=() TITLE=()
+PRESETS=(none)
+PARAMS[none]="experiment_mode=1"
+TITLE[none]="Experiment mode, no isolated CPUs"
+read -ra preset_list <<< "$EXPERIMENT_MODE_CPU_PRESETS"
+for preset in "${preset_list[@]}"; do
+    [ -z "${PARAMS[$preset]:-}" ] || continue     # listed twice
+    housekeeping=$(check_preset "$preset") || continue
+    count=$(wc -w <<< "$(expand_cpus "$preset")")
+    PRESETS+=("$preset")
+    PARAMS[$preset]="isolcpus=managed_irq,domain,$preset nohz_full=$preset rcu_nocbs=$preset irqaffinity=$housekeeping experiment_mode=1"
+    TITLE[$preset]="Experiment mode, $count isolated CPUs ($preset)"
+done
+
+# The preset with DEFAULT_NR_ISO_CPU CPUs goes to the top level.
+DEFAULT_PRESET=""
+for preset in "${PRESETS[@]}"; do
+    if [ "$preset" = none ]; then count=0; else count=$(wc -w <<< "$(expand_cpus "$preset")"); fi
+    if [ "$count" = "$DEFAULT_NR_ISO_CPU" ]; then
+        DEFAULT_PRESET=$preset
+        break
+    fi
+done
+if [ -z "$DEFAULT_PRESET" ]; then
+    DEFAULT_PRESET=${PRESETS[-1]}
+    warn "no preset with DEFAULT_NR_ISO_CPU=$DEFAULT_NR_ISO_CPU CPUs, using ${TITLE[$DEFAULT_PRESET]#Experiment mode, }"
+fi
+
+# Kernel of the top level entries: GRUB_TOP_LEVEL, else the newest Liquorix
+# kernel, else the newest kernel. GRUB_TOP_LEVEL needs GRUB 2.12 or later;
+# older versions ignore it and use the newest kernel.
+TOP_LEVEL=${GRUB_TOP_LEVEL:-}
+if [ -z "$TOP_LEVEL" ]; then
+    TOP_LEVEL=$(find /boot -maxdepth 1 -name 'vmlinuz-*liquorix*' 2>/dev/null | sort -V | tail -n 1)
+fi
+
+# --- Entries ---
+
+# Runs 10_linux for one preset. The preset is added to the titles, and
+# "experiment-<preset>-" in front of the entry IDs, so they differ from the
+# IDs of the normal entries (GRUB_DEFAULT, savedefault). The entries always
+# save themselves as default, which only matters with GRUB_DEFAULT=saved.
+linux_entries() {
+    local preset="$1" cmdline="" param errors status
+    local id="experiment-${preset//,/_}-"
+    for param in "${GRUB_CMDLINE_LINUX_DEFAULT:-}" "$GRUB_EXPERIMENT_MODE_DEFAULT" "${PARAMS[$preset]}"; do
+        [ -n "$param" ] && cmdline+="${cmdline:+ }$param"
+    done
+    errors=$(mktemp) || return 1
+
+    GRUB_CMDLINE_LINUX_DEFAULT="$cmdline" \
+    GRUB_TOP_LEVEL="$TOP_LEVEL" \
+    GRUB_DISABLE_RECOVERY=true \
+    GRUB_DISABLE_SUBMENU=false \
+    GRUB_SAVEDEFAULT=true \
+    GRUB_ACTUAL_DEFAULT="" \
+        sh "$LINUX_SCRIPT" 2>"$errors" |
+        sed -E -e "s#^([[:space:]]*(menuentry|submenu) '[^']*)'#\1 - ${TITLE[$preset]}'#" \
+               -e "s#(\\\$menuentry_id_option ')#\1$id#"
+    status=$?
+
+    # 10_linux lists every kernel it finds; that was shown for the normal entries.
+    grep -v -e '^Found linux image' -e '^Found initrd image' "$errors" >&2
+    rm -f "$errors"
+    return "$status"
+}
+
+output=$(linux_entries "$DEFAULT_PRESET") || { warn "10_linux failed, no entries added"; exit 0; }
+grep -q '^menuentry ' <<< "$output" || exit 0     # no kernels
+
+# The lines 10_linux writes before its first entry (global settings such as
+# linux_gfx_mode, and on Ubuntu a function) are left out inside the submenu:
+# GRUB does not accept a function there, and the settings are already made.
+others=""
+for preset in "${PRESETS[@]}"; do
+    [ "$preset" = "$DEFAULT_PRESET" ] && continue
+    entries=$(linux_entries "$preset" | sed -n -E '/^(menuentry|submenu) /,$p') ||
+        { warn "10_linux failed for ${TITLE[$preset]}"; continue; }
+    others+="$entries"$'\n'
+done
+
+echo "Adding experiment mode entries: ${TITLE[$DEFAULT_PRESET]#Experiment mode, }" >&2
+echo "$output"
+if [ -n "$others" ]; then
+    echo "submenu 'Experiment mode, other CPU presets' \$menuentry_id_option 'experiment-presets' {"
+    sed 's/^/\t/' <<< "$others"
+    echo "}"
+fi
+exit 0

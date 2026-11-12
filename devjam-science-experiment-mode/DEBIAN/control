@@ -9,14 +9,15 @@ Replaces: devjam-science-experiment-mode-rtirq (<< 1.47-1~)
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: Experiment mode with isolated CPU cores for lab timing
  Experiment mode for lab computers with deterministic timing for EEG,
- button boxes and audio-visual stimuli. It adds GRUB entries that
- isolate CPU cores (kernel parameter experiment_mode=1), a service that
- pins audio IRQs (internal and USB) to the isolated cores, disables
- irqbalance in experiment mode, and includes tools to check the setup
- (check-isolation, usb-affinity).
+ button boxes and audio-visual stimuli. It adds GRUB entries with the
+ kernel parameter experiment_mode=1, one set per CPU preset, that
+ isolate CPU cores (isolcpus, nohz_full, rcu_nocbs) and keep the other
+ IRQs off them (irqaffinity). The entries are made by update-grub
+ itself, for every installed kernel. In experiment mode a service pins
+ the IRQs of the sound cards (internal and USB) to the isolated cores
+ and irqbalance does not run. check-isolation and usb-affinity show the
+ result.
  .
  Real-time IRQ priorities come from devjam-system-config-rtirq, which
- is installed with it. switch-rtirq links rtirq to experiment mode:
- when linked, rtirq.service only starts when the kernel is booted with
- experiment_mode=1; when unlinked (the default), rtirq starts in both
- normal and experiment mode.
+ is installed with it. switch-rtirq chooses whether rtirq.service runs
+ only in experiment mode or always (the default).

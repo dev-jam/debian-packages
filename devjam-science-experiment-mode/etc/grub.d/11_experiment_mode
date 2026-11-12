@@ -1,0 +1,15 @@
+#!/bin/sh
+# Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Experiment mode entries (devjam-science-experiment-mode).
+# Settings: /etc/default/grub.d/11_experiment_mode_defaults.cfg
+#
+# The entries are made by the script below. This file only calls it, so
+# no entries are added once the package is removed (but not yet purged).
+set -e
+
+script=/usr/lib/devjam/experiment-mode/grub-entries
+if [ -x "$script" ]; then
+    exec "$script"
+fi

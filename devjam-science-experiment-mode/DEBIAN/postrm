@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+dpkg-maintscript-helper rm_conffile /etc/kernel/postinst.d/99-grub-experiment-mode 1.1-1~ -- "$@"
+dpkg-maintscript-helper rm_conffile /etc/kernel/postrm.d/99-grub-experiment-mode 1.1-1~ -- "$@"
+
 case "$1" in
     remove)
         if [ -d /run/systemd/system ]; then
@@ -17,9 +20,8 @@ case "$1" in
             udevadm control --reload || true
         fi
 
-        # Remove the GRUB script that update-grub-custom-experiment-mode
-        # generates, then update grub without experiment mode
-        rm -f /etc/grub.d/11_experiment_mode
+        # /etc/grub.d/11_experiment_mode stays until purge, but adds no
+        # entries without /usr/lib/devjam/experiment-mode/grub-entries.
         if command -v update-grub >/dev/null 2>&1; then
             update-grub 2>/dev/null || true
         fi

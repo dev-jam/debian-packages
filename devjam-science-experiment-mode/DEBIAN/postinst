@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+dpkg-maintscript-helper rm_conffile /etc/kernel/postinst.d/99-grub-experiment-mode 1.1-1~ -- "$@"
+dpkg-maintscript-helper rm_conffile /etc/kernel/postrm.d/99-grub-experiment-mode 1.1-1~ -- "$@"
+
 case "$1" in
     configure)
         # Load 99-auto-pin-audio.rules. auto-pin-audio.service (started
@@ -12,6 +15,18 @@ case "$1" in
 
         # auto-pin-audio-irq logs to the journal since 1.1-1.
         rm -f /var/log/auto-pin-audio_*.log
+
+        # update-grub makes the GRUB entries since 1.1-1. Remove the log of
+        # the old kernel hooks, and the hooks themselves where they were
+        # still conffiles of devjam-science-experiment-mode-rtirq (an upgrade
+        # straight from 1.46-1 or older), which rm_conffile does not cover.
+        for f in /etc/kernel/postinst.d/99-grub-experiment-mode /etc/kernel/postrm.d/99-grub-experiment-mode; do
+            if [ -f "$f" ] && ! dpkg-query -S "$f" >/dev/null 2>&1 \
+                && grep -q update-grub-custom-experiment-mode "$f"; then
+                rm -f "$f"
+            fi
+        done
+        rm -rf /var/log/kernel-grub
 
         # switch-rtirq before 1.1-1 limited only rtirq.service to experiment
         # mode. Extend that choice to rtirq-resume.service, which also runs
@@ -26,8 +41,8 @@ esac
 
 # auto-pin-audio.service: enable on first installation and keep the
 # administrator's choice on upgrades, then start it (the snippets
-# dh_installsystemd generates). The enable state is kept per
-# unit, so a choice made while the service was part of
+# dh_installsystemd generates). The enable state is kept per unit, so a
+# choice made while the service was part of
 # devjam-science-experiment-mode-rtirq carries over.
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
     # was-enabled defaults to true, so new installations run enable.
@@ -45,9 +60,8 @@ fi
 
 case "$1" in
     configure)
-        # Update grub experiment mode
+        # Add or update the experiment mode entries (/etc/grub.d/11_experiment_mode).
         if command -v update-grub >/dev/null 2>&1; then
-            update-grub-custom-experiment-mode || true
             update-grub || true
         fi
         ;;

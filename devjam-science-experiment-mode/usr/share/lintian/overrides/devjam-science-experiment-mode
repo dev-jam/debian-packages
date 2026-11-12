@@ -1,2 +1,5 @@
 # Man pages are not written yet; docs/man-pages.md lists which commands need one.
 devjam-science-experiment-mode: no-manual-page *
+# Built with dpkg-deb, without debhelper: there is no debian/*.maintscript,
+# so the maintainer scripts call dpkg-maintscript-helper themselves.
+devjam-science-experiment-mode: maintainer-script-should-not-use-dpkg-maintscript-helper *
