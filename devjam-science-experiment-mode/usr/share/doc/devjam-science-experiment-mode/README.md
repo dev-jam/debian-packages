@@ -121,8 +121,10 @@ check-isolation -1      # once; without -1 it refreshes every 2 seconds
 It shows, in this order:
 
 - the mode, the kernel, whether IRQs are threaded, the isolated and
-  `nohz_full` CPUs, `irqaffinity`, and whether irqbalance, rtirq and
-  auto-pin-audio are active;
+  `nohz_full` CPUs, `irqaffinity`, and the state of irqbalance, rtirq and
+  auto-pin-audio: `done` means the oneshot service has run, `skipped` that
+  its condition did not hold (irqbalance in experiment mode, auto-pin-audio
+  in normal mode);
 - warnings, for example irqbalance running in experiment mode;
 - the IRQs that run on isolated CPUs: the sound cards (and the USB
   controller of a USB audio interface) belong there, other IRQs normally do
@@ -135,7 +137,7 @@ More detail:
 
 ```bash
 verify-rtirq            # priorities of the IRQ threads
-check-rt-processes -1   # all real-time threads, with the CPU they last ran on
+check-rt-processes -1   # real-time threads with their CPUs (-a: also default kernel threads)
 usb-affinity            # USB controllers, their IRQs and the devices behind them
 journalctl -b -u auto-pin-audio.service   # which sound card IRQ went to which CPU
 manage-opensesame-affinity --show         # CPU setting of OpenSesame (RT)
@@ -244,9 +246,16 @@ suspend).
 The menu entry starts the user service `opensesame-psychopy-rt.service`
 (`systemctl --user start`). The service runs OpenSesame with SCHED_RR
 priority 40 and sets `OPENSESAME_CPUS=isolated`, which makes
-`opensesame-psychopy-launch` start OpenSesame on the CPUs in
-`/sys/devices/system/cpu/isolated`. Without isolated CPUs (normal mode) it
-runs on the normal CPUs.
+`opensesame-psychopy-launch` start OpenSesame with `taskset` on the CPUs in
+`/sys/devices/system/cpu/isolated`, unless the service has a
+`CPUAffinity=` (see below). Without isolated CPUs (normal mode) it keeps
+the CPUs it inherits.
+
+The launcher sets the CPUs itself because the inherited affinity cannot be
+trusted: the user service manager can have every CPU in it, isolated ones
+included. The kernel gives a task that moves into a cgroup with the cpuset
+controller the CPUs of that cpuset (`kernel/cgroup/cpuset.c`), and those
+include CPUs isolated at boot.
 
 `manage-opensesame-affinity` writes a drop-in for this service with
 `CPUAffinity=` (and an empty `OPENSESAME_CPUS`), in
@@ -261,7 +270,7 @@ system one. Such fixed CPUs apply in normal mode too.
 | No experiment mode entries in GRUB | `ENABLE_EXPERIMENT_MODE` is not `"true"`, or `update-grub` did not run; check the `Experiment mode:` lines in its output |
 | A preset is missing | `update-grub` skipped it: CPU 0, a CPU that does not exist, or an invalid list |
 | OpenSesame (RT) does not start | `journalctl --user -u opensesame-psychopy-rt`; usually the user has no real-time limit: add the user to `audio` (setup step 7) and log in again |
-| OpenSesame (RT) runs on the wrong CPUs | `manage-opensesame-affinity --show`; an old drop-in with fixed CPUs wins, `manage-opensesame-affinity --disable` (and `--system --disable`) removes it |
+| OpenSesame (RT) runs on the wrong CPUs | `check-rt-processes -1` shows its CPUs (column CPUS); `manage-opensesame-affinity --show` shows a drop-in with fixed CPUs, which wins; `--disable` (and `--system --disable`) removes it. Started OpenSesame before the 1.10-1 update? Close it and start it again |
 | `check-isolation` warns that irqbalance runs | `systemctl cat irqbalance.service` should show the drop-in `disable-experiment.conf`; was the computer booted with `experiment_mode=1`? |
 | "no threaded IRQs" | rtirq has nothing to prioritize; add `threadirqs` (setup step 4) |
 | "nohz_full= is set but not active" | The kernel lacks `CONFIG_NO_HZ_FULL`: `grep NO_HZ_FULL /boot/config-$(uname -r)` |
