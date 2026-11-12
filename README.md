@@ -88,7 +88,7 @@ The packages in the *Science / lab setups* section are published in the `science
 | Package | Purpose |
 | --- | --- |
 | `devjam-science-tools` | Tools for experimental lab setups |
-| `devjam-science-experiment-mode` | Experiment mode: GRUB entries with isolated CPU cores, audio IRQ pinning, no irqbalance, `switch-rtirq` to start rtirq only in experiment mode (depends on `devjam-system-config-rtirq`) |
+| `devjam-science-experiment-mode` | Experiment mode: GRUB entries with isolated CPU cores per CPU preset, sound card IRQ pinning, no irqbalance, `switch-rtirq` to run rtirq only in experiment mode (depends on `devjam-system-config-rtirq`); how it works: [`README.md`](devjam-science-experiment-mode/usr/share/doc/devjam-science-experiment-mode/README.md) |
 | `devjam-science-experiment-mode-rtirq` | Transitional package for `devjam-science-experiment-mode` (split into it and `devjam-system-config-rtirq`) |
 | `devjam-science-opensesame-psychopy` | Settings and launch scripts for OpenSesame and PsychoPy, OpenSesame with real-time priority on the isolated CPUs of experiment mode |
 | `devjam-science-tools-matlab` | MATLAB (and Psychtoolbox) launchers and KDE service menus |
