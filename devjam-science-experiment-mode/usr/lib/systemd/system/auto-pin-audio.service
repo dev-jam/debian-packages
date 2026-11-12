@@ -3,7 +3,8 @@ Description=Pin sound card IRQs to the isolated CPUs (experiment mode)
 Documentation=file:///usr/share/doc/devjam-science-experiment-mode/README.md
 # Only in experiment mode (GRUB entries with experiment_mode=1).
 ConditionKernelCommandLine=experiment_mode=1
-After=sound.target
+# experiment-mode-cpus.service first moves every IRQ off the isolated CPUs.
+After=sound.target experiment-mode-cpus.service
 
 [Service]
 # Started at boot and, by 99-auto-pin-audio.rules, for every sound card that

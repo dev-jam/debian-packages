@@ -2,9 +2,9 @@
 # Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Keeps services, virtual machines and login sessions off the isolated CPUs
-# in experiment mode. Run by experiment-mode-cpus.service at boot, before
-# the first login.
+# Keeps services, virtual machines, login sessions and IRQs off the isolated
+# CPUs in experiment mode. Run by experiment-mode-cpus.service at boot,
+# before the first login and before auto-pin-audio.service.
 #
 # isolcpus= takes the isolated CPUs out of the affinity of PID 1, and new
 # processes normally inherit that. But once the cpuset controller is on
@@ -21,8 +21,18 @@
 # user.slice itself is not limited: OpenSesame (RT) is a user service and
 # its launcher pins it to the isolated CPUs.
 #
+# IRQs: /proc/irq/default_smp_affinity (where new IRQs start) and every IRQ
+# that may run on an isolated CPU go to the other CPUs. irqaffinity= on the
+# kernel command line does the same from the start of the boot, but the
+# Debian Live image cannot know the CPUs of the machine (its "8-N" is
+# invalid on a machine with 8 CPUs or fewer, and the kernel then keeps all
+# CPUs). Managed IRQs (NVMe queues) are placed by the kernel and stay.
+# auto-pin-audio.service runs afterwards and pins the sound card IRQs to the
+# isolated CPUs again.
+#
 # --undo removes the limits again (for the running system; the user
-# service managers keep their CPUs until the next login).
+# service managers keep their CPUs until the next login, and the IRQs stay
+# where they are; new IRQs may start on every CPU again).
 
 set -u
 
@@ -66,6 +76,42 @@ compress_cpus() {
     echo "${list#,}"
 }
 
+# Hex mask for /proc/irq/default_smp_affinity: 32-bit words, most significant
+# first, separated by commas ("0 1 8 9" -> "00000303").
+cpu_mask() {
+    local cpu i max=0 mask=""
+    local -a words=()
+    for cpu in $1; do ((cpu > max)) && max=$cpu; done
+    for ((i = 0; i <= max / 32; i++)); do words[i]=0; done
+    for cpu in $1; do
+        words[cpu / 32]=$((words[cpu / 32] | (1 << (cpu % 32))))
+    done
+    for ((i = max / 32; i >= 0; i--)); do
+        mask+=$(printf '%08x,' "${words[i]}")
+    done
+    echo "${mask%,}"
+}
+
+# Moves every IRQ that may run on one of the CPUs in $1 to the CPU list $2.
+# Prints how many moved and how many refused (managed IRQs).
+move_irqs() {
+    local dir cpu current moved=0 refused=0
+    for dir in /proc/irq/[0-9]*; do
+        current=$(cat "$dir/smp_affinity_list" 2>/dev/null) || continue
+        for cpu in $(expand_cpus "$current"); do
+            if [[ " $1 " == *" $cpu "* ]]; then
+                if echo "$2" > "$dir/smp_affinity_list" 2>/dev/null; then
+                    moved=$((moved + 1))
+                else
+                    refused=$((refused + 1))
+                fi
+                break
+            fi
+        done
+    done
+    echo "IRQs moved to CPUs $2: $moved; left in place (managed by the kernel): $refused"
+}
+
 write_dropin() {
     mkdir -p "$RUN/$1.d"
     printf '# Written by %s (experiment mode), gone after reboot.\n[%s]\n%s\n' \
@@ -89,7 +135,9 @@ undo() {
     systemctl daemon-reload
     set_slice system.slice ""
     set_slice machine.slice ""
-    echo "Limits removed. User sessions keep their CPUs until the next login."
+    cpu_mask "$(expand_cpus "$(cat /sys/devices/system/cpu/online)")" > /proc/irq/default_smp_affinity
+    echo "Limits removed. User sessions keep their CPUs until the next login;"
+    echo "IRQs stay where they are, new IRQs may start on every CPU."
 }
 
 case "${1:-}" in
@@ -105,11 +153,12 @@ if [ -z "$isolated" ]; then
     exit 0
 fi
 
-others=""
+isolated_cpus=" $(expand_cpus "$isolated") "
+other_cpus=""
 for cpu in $(expand_cpus "$(cat /sys/devices/system/cpu/online)"); do
-    [[ " $(expand_cpus "$isolated") " == *" $cpu "* ]] || others+=" $cpu"
+    [[ $isolated_cpus == *" $cpu "* ]] || other_cpus+=" $cpu"
 done
-others=$(compress_cpus "$others")
+others=$(compress_cpus "$other_cpus")
 if [ -z "$others" ]; then
     echo "Every online CPU is isolated, nothing left for the other processes." >&2
     exit 1
@@ -124,3 +173,11 @@ set_slice machine.slice "$others"
 
 echo "Isolated CPUs: $isolated"
 echo "Services, virtual machines, login sessions and user service managers: CPUs $others"
+
+cpu_mask "$other_cpus" > /proc/irq/default_smp_affinity
+echo "New IRQs start on CPUs $others"
+move_irqs "$isolated_cpus" "$others"
+
+# Puts the sound card IRQs back on the isolated CPUs. At boot it is ordered
+# after this service anyway; this also covers a restart of this service.
+systemctl start --no-block auto-pin-audio.service 2>/dev/null || true

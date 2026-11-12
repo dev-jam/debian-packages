@@ -122,7 +122,9 @@ check-isolation -1      # once; without -1 it refreshes every 2 seconds
 It shows, in this order:
 
 - the mode, the kernel, whether IRQs are threaded, the isolated and
-  `nohz_full` CPUs, `irqaffinity`, and the state of irqbalance, rtirq,
+  `nohz_full` CPUs, where new IRQs start (`/proc/irq/default_smp_affinity`,
+  with `irqaffinity=` of the kernel command line), and the state of
+  irqbalance, rtirq,
   auto-pin-audio and experiment-mode-cpus: `done` means the oneshot service
   has run, `skipped` that its condition did not hold (irqbalance in
   experiment mode, the others in normal mode);
@@ -153,7 +155,7 @@ manage-opensesame-affinity --show         # CPU setting of OpenSesame (RT)
 | Preset at the top level | `DEFAULT_NR_ISO_CPU` (number of CPUs of a preset, 0 for the preset without isolated CPUs), then `sudo update-grub` |
 | Extra kernel parameters in experiment mode | `GRUB_EXPERIMENT_MODE_DEFAULT`, then `sudo update-grub` |
 | Kernel of the top level entry | Newest Liquorix kernel, else newest kernel; `GRUB_TOP_LEVEL=/boot/vmlinuz-...` in `/etc/default/grub` chooses another one (GRUB 2.12 or later) |
-| Let other processes use the isolated CPUs again | `sudo systemctl disable experiment-mode-cpus.service` (from the next boot), or `sudo /usr/lib/devjam/experiment-mode/confine-cpus --undo` (now, for new logins) |
+| Let other processes and IRQs use the isolated CPUs again | `sudo systemctl disable experiment-mode-cpus.service` (from the next boot), or `sudo /usr/lib/devjam/experiment-mode/confine-cpus --undo` (now: services and new IRQs; new logins; existing IRQs stay where they are) |
 | Fixed CPUs for OpenSesame (RT) | `manage-opensesame-affinity 2-5` (you), `--system 2-5` (all users); `--disable` goes back to the isolated CPUs |
 | USB controller of a button box on an isolated CPU | `usb-affinity usb1 2` (until the next reboot; `usb-affinity` lists the buses) |
 | rtirq only in experiment mode, or always | `sudo switch-rtirq experiment` / `sudo switch-rtirq always` |
@@ -171,9 +173,9 @@ GRUB: "Debian GNU/Linux - Experiment mode, 6 isolated CPUs (2-7)"
    v
 systemd (ConditionKernelCommandLine on experiment_mode=1)
    |-- experiment-mode-cpus.service
-   |                           services, VMs, login sessions -> CPUs 0-1,8-15
+   |                           services, VMs, login sessions, IRQs -> CPUs 0-1,8-15
    |-- irqbalance.service      does not run
-   |-- auto-pin-audio.service  sound card IRQs -> CPUs 2-7, round robin
+   |-- auto-pin-audio.service  then: sound card IRQs -> CPUs 2-7, round robin
    |                           (again for every sound card plugged in, via udev)
    |-- rtirq.service           IRQ threads get SCHED_FIFO priorities
    |   rtirq-resume.service    (always, or only in experiment mode: switch-rtirq)
@@ -209,7 +211,7 @@ The kernel parameters of a preset:
 | `isolcpus=managed_irq,domain,<cpus>` | No other tasks and no load balancing on these CPUs; managed IRQs (such as NVMe queues) avoid them where possible |
 | `nohz_full=<cpus>` | No timer tick while one task runs (needs `CONFIG_NO_HZ_FULL` in the kernel) |
 | `rcu_nocbs=<cpus>` | RCU callbacks run on the other CPUs |
-| `irqaffinity=<other cpus>` | All IRQs start on the other CPUs; auto-pin-audio and usb-affinity move chosen ones to the isolated CPUs |
+| `irqaffinity=<other cpus>` | All IRQs start on the other CPUs; experiment-mode-cpus.service sets the same again at boot, auto-pin-audio and usb-affinity move chosen ones to the isolated CPUs |
 | `experiment_mode=1` | Switch for the systemd units |
 
 The entry IDs start with `experiment-<preset>-` (for example
@@ -246,7 +248,7 @@ rtirq gives the IRQ threads of the drivers in `RTIRQ_NAME_LIST`
 `rtirq-resume.service`, which also runs `rtirq start` (at boot and after
 suspend).
 
-### Other processes
+### Other processes and IRQs
 
 `isolcpus=` takes the isolated CPUs out of the affinity of PID 1, and new
 processes normally inherit that. That breaks once the cpuset controller of
@@ -266,12 +268,23 @@ login, and limits until the next reboot:
 | `system.slice` (services), `machine.slice` (virtual machines, containers) | `AllowedCPUs=` the other CPUs |
 | `session-*.scope` (login sessions) | `AllowedCPUs=` the other CPUs |
 | `user@.service` (the user service manager) | `CPUAffinity=` the other CPUs; user units inherit it |
+| New IRQs | `/proc/irq/default_smp_affinity` the other CPUs |
+| Existing IRQs that may run on an isolated CPU | `/proc/irq/N/smp_affinity_list` the other CPUs |
 
-The settings are runtime drop-ins in `/run/systemd/system` and
-`systemctl set-property --runtime`. `user.slice` itself stays unlimited:
+The settings are runtime drop-ins in `/run/systemd/system`,
+`systemctl set-property --runtime` and the files in `/proc/irq`. `user.slice` itself stays unlimited:
 OpenSesame (RT) is a user service, and its launcher pins it to the
 isolated CPUs. A program can still pin itself to an isolated CPU on
 purpose; `isolcpus=` never prevents that.
+
+The IRQ settings repeat `irqaffinity=` of the kernel command line, now that
+the CPUs of the machine are known. That matters for the Debian Live image:
+it cannot know them at build time, so its `irqaffinity=0-1,8-N` (`N` is the
+last CPU) is invalid on a machine with 8 CPUs or fewer, and the kernel then
+keeps all CPUs (`irq_affinity_setup` in `kernel/irq/irqdesc.c`). Managed
+IRQs, such as NVMe queues, are placed by the kernel and stay. Afterwards
+`auto-pin-audio.service` (ordered after `experiment-mode-cpus.service`, and
+started again by it) pins the sound card IRQs to the isolated CPUs.
 
 ### OpenSesame with real-time priority
 
@@ -305,7 +318,8 @@ system one. Such fixed CPUs apply in normal mode too.
 | "nohz_full= is set but not active" | The kernel lacks `CONFIG_NO_HZ_FULL`: `grep NO_HZ_FULL /boot/config-$(uname -r)` |
 | A sound card IRQ shows "unchanged" | `journalctl -b -u auto-pin-audio.service`; a managed IRQ is placed by the kernel and cannot be moved |
 | "N processes may also run on the isolated CPUs" | `systemctl status experiment-mode-cpus.service`: did it run? Sessions that started before it keep all CPUs: log in again. Processes started outside systemd's slices are not covered |
-| Other IRQs on isolated CPUs | Pinned by hand (`usb-affinity`), or a managed IRQ whose queue has only isolated CPUs |
+| "new IRQs may start on the isolated CPUs" | `systemctl status experiment-mode-cpus.service`: did it run? `sudo systemctl restart experiment-mode-cpus.service` sets the IRQs again |
+| Other IRQs on isolated CPUs | Expected: the sound card IRQs (auto-pin-audio), IRQs pinned by hand (`usb-affinity`), and managed IRQs whose queue has only isolated CPUs (NVMe). Others: `journalctl -b -u experiment-mode-cpus.service` shows how many IRQs it moved |
 
 ## Things to know
 
@@ -360,7 +374,7 @@ system one. Such fixed CPUs apply in normal mode too.
 | `/etc/grub.d/11_experiment_mode`, `/usr/lib/devjam/experiment-mode/grub-entries` | Make the GRUB entries during `update-grub` |
 | `/usr/lib/systemd/system/auto-pin-audio.service`, `/usr/lib/udev/rules.d/99-auto-pin-audio.rules` | Pin sound card IRQs in experiment mode |
 | `/usr/lib/systemd/system/irqbalance.service.d/disable-experiment.conf` | No irqbalance in experiment mode |
-| `/usr/lib/systemd/system/experiment-mode-cpus.service`, `/usr/lib/devjam/experiment-mode/confine-cpus` | Keep other processes off the isolated CPUs in experiment mode |
+| `/usr/lib/systemd/system/experiment-mode-cpus.service`, `/usr/lib/devjam/experiment-mode/confine-cpus` | Keep other processes and IRQs off the isolated CPUs in experiment mode |
 | `/run/systemd/system/{user@.service,session-.scope,machine.slice}.d/50-experiment-mode-cpus.conf` | Made by `confine-cpus`, gone after reboot |
 | `/etc/systemd/system/rtirq.service.d/experiment_mode.conf`, `.../rtirq-resume.service.d/...` | Made by `switch-rtirq experiment` |
 | `/etc/rtirq.conf` | rtirq priorities (diverted by devjam-system-config-rtirq) |
@@ -389,3 +403,7 @@ system one. Such fixed CPUs apply in normal mode too.
   with `CPUAffinity=`), `src/core/scope.c` (scopes load drop-ins).
 - Linux kernel, `kernel/cgroup/cpuset.c` (`cpuset_fork`, `cpuset_attach`)
   and `kernel/sched/deadline.c` (fair server, 50 ms per 1000 ms).
+- Linux kernel, `Documentation/core-api/irq/irq-affinity.rst` and
+  `kernel/irq/proc.c` (`/proc/irq/default_smp_affinity`, a hex mask, and
+  `/proc/irq/N/smp_affinity_list`); `Documentation/admin-guide/kernel-parameters.rst`
+  (`N` as the last CPU in CPU lists).
