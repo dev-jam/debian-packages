@@ -55,6 +55,35 @@ expand_cpus() {
     echo "${out[*]}"
 }
 
+# "0 1 2 3 8" -> "0-3,8"
+compress_cpus() {
+    local cpu start="" prev="" list=""
+    for cpu in $1 ""; do
+        if [ -n "$prev" ] && [ "$cpu" = "$((prev + 1))" ]; then
+            prev=$cpu
+            continue
+        fi
+        if [ -n "$start" ]; then
+            if [ "$start" = "$prev" ]; then list+=",$start"; else list+=",$start-$prev"; fi
+        fi
+        start=$cpu prev=$cpu
+    done
+    echo "${list#,}"
+}
+
+# CPUs of a hex CPU mask ("0fffff03" or "ffffffff,00000003") -> "0 1 8 9 ..."
+mask_to_cpus() {
+    local hex=${1//,/} cpu=0 i digit bit list=""
+    for ((i = ${#hex} - 1; i >= 0; i--)); do
+        digit=$((16#${hex:i:1}))
+        for bit in 0 1 2 3; do
+            if ((digit >> bit & 1)); then list+=" $((cpu + bit))"; fi
+        done
+        cpu=$((cpu + 4))
+    done
+    echo "${list# }"
+}
+
 # --- Boot settings (do not change while running) ---
 
 CMDLINE=" $(cat /proc/cmdline) "
@@ -138,7 +167,8 @@ leaking_processes() {
 }
 
 settings() {
-    local warn=() mode=normal threaded=no unit w leaks
+    local warn=() mode=normal threaded=no unit w leaks cpu default_irq
+    default_irq=$(mask_to_cpus "$(cat /proc/irq/default_smp_affinity 2>/dev/null)")
     [[ $CMDLINE == *" experiment_mode=1 "* ]] && mode=experiment
     if [[ $(uname -v) == *PREEMPT_RT* ]]; then
         threaded="yes (PREEMPT_RT)"
@@ -147,7 +177,7 @@ settings() {
     fi
 
     echo "${BOLD}Mode:${RESET} $mode    ${BOLD}Kernel:${RESET} $(uname -r)    ${BOLD}Threaded IRQs:${RESET} $threaded"
-    echo "${BOLD}Isolated (isolcpus):${RESET} ${ISOLATED:--}    ${BOLD}nohz_full:${RESET} ${NOHZ_FULL:--}    ${BOLD}irqaffinity:${RESET} $(param irqaffinity)"
+    echo "${BOLD}Isolated (isolcpus):${RESET} ${ISOLATED:--}    ${BOLD}nohz_full:${RESET} ${NOHZ_FULL:--}    ${BOLD}New IRQs on:${RESET} $(compress_cpus "$default_irq") (irqaffinity=$(param irqaffinity))"
     for unit in irqbalance rtirq auto-pin-audio experiment-mode-cpus; do
         printf '%s%s:%s %s  ' "$BOLD" "$unit" "$RESET" "$(unit_state "$unit.service")"
     done
@@ -162,6 +192,12 @@ settings() {
     if [ "$mode" = experiment ] && [ "$threaded" = no ]; then
         warn+=("no threaded IRQs, so rtirq has no IRQ threads to prioritize")
     fi
+    for cpu in $default_irq; do
+        if [ -n "${IS_ISOLATED[$cpu]:-}" ]; then
+            warn+=("new IRQs may start on the isolated CPUs (/proc/irq/default_smp_affinity): experiment-mode-cpus.service not active?")
+            break
+        fi
+    done
     if [ -n "$ISOLATED" ]; then
         leaks=$(leaking_processes)
         if [ "${leaks%% *}" != 0 ]; then
