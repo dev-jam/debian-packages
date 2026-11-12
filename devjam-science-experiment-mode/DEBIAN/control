@@ -14,9 +14,10 @@ Description: Experiment mode with isolated CPU cores for lab timing
  isolate CPU cores (isolcpus, nohz_full, rcu_nocbs) and keep the other
  IRQs off them (irqaffinity). The entries are made by update-grub
  itself, for every installed kernel. In experiment mode a service pins
- the IRQs of the sound cards (internal and USB) to the isolated cores
- and irqbalance does not run. check-isolation and usb-affinity show the
- result.
+ the IRQs of the sound cards (internal and USB) to the isolated cores,
+ another one keeps services, virtual machines and login sessions off
+ them, and irqbalance does not run. check-isolation and usb-affinity
+ show the result.
  .
  Real-time IRQ priorities come from devjam-system-config-rtirq, which
  is installed with it. switch-rtirq chooses whether rtirq.service runs

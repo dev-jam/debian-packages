@@ -27,10 +27,10 @@ case "$1" in
         fi
         ;;
     purge)
-        # Forget the enable state of auto-pin-audio.service
+        # Forget the enable state of the services
         # (the snippet dh_installsystemd generates)
         if [ -x "/usr/bin/deb-systemd-helper" ]; then
-            deb-systemd-helper purge 'auto-pin-audio.service' >/dev/null || true
+            deb-systemd-helper purge 'auto-pin-audio.service' 'experiment-mode-cpus.service' >/dev/null || true
         fi
         ;;
 esac

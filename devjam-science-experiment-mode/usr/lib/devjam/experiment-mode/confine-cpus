@@ -1,0 +1,126 @@
+#!/bin/bash
+# Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Keeps services, virtual machines and login sessions off the isolated CPUs
+# in experiment mode. Run by experiment-mode-cpus.service at boot, before
+# the first login.
+#
+# isolcpus= takes the isolated CPUs out of the affinity of PID 1, and new
+# processes normally inherit that. But once the cpuset controller is on
+# (Docker, containerd and other units with Delegate=yes turn it on),
+# systemd starts every service with clone3(CLONE_INTO_CGROUP) into another
+# cpuset, and the kernel gives the new process every CPU of that cpuset,
+# the isolated ones included (cpuset_fork in kernel/cgroup/cpuset.c).
+#
+# This script limits, until the next reboot:
+#   system.slice, machine.slice  AllowedCPUs=<other CPUs> (services, VMs)
+#   session-*.scope              AllowedCPUs=<other CPUs> (login sessions)
+#   user@.service                CPUAffinity=<other CPUs> (the user service
+#                                manager; the user units inherit it)
+# user.slice itself is not limited: OpenSesame (RT) is a user service and
+# its launcher pins it to the isolated CPUs.
+#
+# --undo removes the limits again (for the running system; the user
+# service managers keep their CPUs until the next login).
+
+set -u
+
+DROPIN=50-experiment-mode-cpus.conf
+RUN=/run/systemd/system
+
+usage() {
+    echo "Usage: ${0##*/} [--undo]"
+}
+
+# "0-3,8" -> "0 1 2 3 8"
+expand_cpus() {
+    local part cpu
+    local -a parts out=()
+    IFS=, read -ra parts <<< "$1"
+    for part in "${parts[@]}"; do
+        if [[ $part =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            for ((cpu = BASH_REMATCH[1]; cpu <= BASH_REMATCH[2]; cpu++)); do
+                out+=("$cpu")
+            done
+        elif [[ $part =~ ^[0-9]+$ ]]; then
+            out+=("$part")
+        fi
+    done
+    echo "${out[*]}"
+}
+
+# "0 1 2 3 8" -> "0-3,8"
+compress_cpus() {
+    local cpu start="" prev="" list=""
+    for cpu in $1 ""; do
+        if [ -n "$prev" ] && [ "$cpu" = "$((prev + 1))" ]; then
+            prev=$cpu
+            continue
+        fi
+        if [ -n "$start" ]; then
+            if [ "$start" = "$prev" ]; then list+=",$start"; else list+=",$start-$prev"; fi
+        fi
+        start=$cpu prev=$cpu
+    done
+    echo "${list#,}"
+}
+
+write_dropin() {
+    mkdir -p "$RUN/$1.d"
+    printf '# Written by %s (experiment mode), gone after reboot.\n[%s]\n%s\n' \
+        "$0" "$2" "$3" > "$RUN/$1.d/$DROPIN"
+}
+
+# Sets AllowedCPUs on a slice that is running; the drop-in or the
+# runtime setting covers it otherwise.
+set_slice() {
+    if systemctl is-active --quiet "$1"; then
+        systemctl set-property --runtime "$1" "AllowedCPUs=$2"
+    fi
+}
+
+undo() {
+    local unit
+    for unit in user@.service session-.scope machine.slice; do
+        rm -f "$RUN/$unit.d/$DROPIN"
+        rmdir "$RUN/$unit.d" 2>/dev/null
+    done
+    systemctl daemon-reload
+    set_slice system.slice ""
+    set_slice machine.slice ""
+    echo "Limits removed. User sessions keep their CPUs until the next login."
+}
+
+case "${1:-}" in
+    "") ;;
+    --undo) undo; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+esac
+
+isolated=$(cat /sys/devices/system/cpu/isolated 2>/dev/null)
+if [ -z "$isolated" ]; then
+    echo "No isolated CPUs (isolcpus=), nothing to limit."
+    exit 0
+fi
+
+others=""
+for cpu in $(expand_cpus "$(cat /sys/devices/system/cpu/online)"); do
+    [[ " $(expand_cpus "$isolated") " == *" $cpu "* ]] || others+=" $cpu"
+done
+others=$(compress_cpus "$others")
+if [ -z "$others" ]; then
+    echo "Every online CPU is isolated, nothing left for the other processes." >&2
+    exit 1
+fi
+
+write_dropin user@.service Service "CPUAffinity=$others"
+write_dropin session-.scope Scope "AllowedCPUs=$others"
+write_dropin machine.slice Slice "AllowedCPUs=$others"
+systemctl daemon-reload
+systemctl set-property --runtime system.slice "AllowedCPUs=$others"
+set_slice machine.slice "$others"
+
+echo "Isolated CPUs: $isolated"
+echo "Services, virtual machines, login sessions and user service managers: CPUs $others"

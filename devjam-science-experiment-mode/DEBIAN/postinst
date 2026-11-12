@@ -39,22 +39,26 @@ case "$1" in
         ;;
 esac
 
-# auto-pin-audio.service: enable on first installation and keep the
-# administrator's choice on upgrades, then start it (the snippets
-# dh_installsystemd generates). The enable state is kept per unit, so a
-# choice made while the service was part of
+# auto-pin-audio.service and experiment-mode-cpus.service: enable on first
+# installation and keep the administrator's choice on upgrades, then start
+# them (the snippets dh_installsystemd generates). The enable state is kept
+# per unit, so a choice made while auto-pin-audio.service was part of
 # devjam-science-experiment-mode-rtirq carries over.
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
-    # was-enabled defaults to true, so new installations run enable.
-    if deb-systemd-helper --quiet was-enabled 'auto-pin-audio.service'; then
-        deb-systemd-helper enable 'auto-pin-audio.service' >/dev/null || true
-    else
-        deb-systemd-helper update-state 'auto-pin-audio.service' >/dev/null || true
-    fi
+    for unit in auto-pin-audio.service experiment-mode-cpus.service; do
+        # was-enabled defaults to true, so new installations run enable.
+        if deb-systemd-helper --quiet was-enabled "$unit"; then
+            deb-systemd-helper enable "$unit" >/dev/null || true
+        else
+            deb-systemd-helper update-state "$unit" >/dev/null || true
+        fi
+    done
     if [ -d /run/systemd/system ]; then
         systemctl --system daemon-reload >/dev/null || true
-        # A oneshot service: start runs it again (only in experiment mode).
-        deb-systemd-invoke start 'auto-pin-audio.service' >/dev/null || true
+        # Oneshot services, only in experiment mode. auto-pin-audio runs
+        # again on start; experiment-mode-cpus stays active once it ran,
+        # and limits user sessions from the next login on.
+        deb-systemd-invoke start 'auto-pin-audio.service' 'experiment-mode-cpus.service' >/dev/null || true
     fi
 fi
 

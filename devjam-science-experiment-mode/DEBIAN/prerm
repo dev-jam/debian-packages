@@ -3,9 +3,15 @@ set -e
 
 case "$1" in
     remove)
-        # Stop auto-pin-audio.service (the snippet dh_installsystemd generates)
+        # Stop the services (the snippet dh_installsystemd generates)
         if [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ]; then
-            deb-systemd-invoke stop 'auto-pin-audio.service' >/dev/null || true
+            deb-systemd-invoke stop 'auto-pin-audio.service' 'experiment-mode-cpus.service' >/dev/null || true
+        fi
+
+        # Lift the CPU limits of experiment-mode-cpus.service, which would
+        # otherwise last until the next reboot.
+        if [ -e /run/systemd/system/user@.service.d/50-experiment-mode-cpus.conf ]; then
+            /usr/lib/devjam/experiment-mode/confine-cpus --undo >/dev/null || true
         fi
 
         # Remove the drop-ins that switch-rtirq creates; postrm reloads

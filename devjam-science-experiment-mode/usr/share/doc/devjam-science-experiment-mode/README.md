@@ -107,7 +107,8 @@ the packages ship them, and the commands below change them for you.
    IRQ is pinned to the isolated CPUs automatically.
 
 What you do not have to do: stop irqbalance, pin sound card IRQs, start
-rtirq, or set the CPUs of OpenSesame. Experiment mode does all of that.
+rtirq, keep other programs off the isolated CPUs, or set the CPUs of
+OpenSesame. Experiment mode does all of that.
 
 The normal launcher **OpenSesame 4.1 with PsychoPy** starts OpenSesame
 without real-time priority and on the normal CPUs, in both modes.
@@ -121,11 +122,12 @@ check-isolation -1      # once; without -1 it refreshes every 2 seconds
 It shows, in this order:
 
 - the mode, the kernel, whether IRQs are threaded, the isolated and
-  `nohz_full` CPUs, `irqaffinity`, and the state of irqbalance, rtirq and
-  auto-pin-audio: `done` means the oneshot service has run, `skipped` that
-  its condition did not hold (irqbalance in experiment mode, auto-pin-audio
-  in normal mode);
-- warnings, for example irqbalance running in experiment mode;
+  `nohz_full` CPUs, `irqaffinity`, and the state of irqbalance, rtirq,
+  auto-pin-audio and experiment-mode-cpus: `done` means the oneshot service
+  has run, `skipped` that its condition did not hold (irqbalance in
+  experiment mode, the others in normal mode);
+- warnings, for example irqbalance running in experiment mode, or other
+  processes that may run on the isolated CPUs;
 - the IRQs that run on isolated CPUs: the sound cards (and the USB
   controller of a USB audio interface) belong there, other IRQs normally do
   not;
@@ -151,6 +153,7 @@ manage-opensesame-affinity --show         # CPU setting of OpenSesame (RT)
 | Preset at the top level | `DEFAULT_NR_ISO_CPU` (number of CPUs of a preset, 0 for the preset without isolated CPUs), then `sudo update-grub` |
 | Extra kernel parameters in experiment mode | `GRUB_EXPERIMENT_MODE_DEFAULT`, then `sudo update-grub` |
 | Kernel of the top level entry | Newest Liquorix kernel, else newest kernel; `GRUB_TOP_LEVEL=/boot/vmlinuz-...` in `/etc/default/grub` chooses another one (GRUB 2.12 or later) |
+| Let other processes use the isolated CPUs again | `sudo systemctl disable experiment-mode-cpus.service` (from the next boot), or `sudo /usr/lib/devjam/experiment-mode/confine-cpus --undo` (now, for new logins) |
 | Fixed CPUs for OpenSesame (RT) | `manage-opensesame-affinity 2-5` (you), `--system 2-5` (all users); `--disable` goes back to the isolated CPUs |
 | USB controller of a button box on an isolated CPU | `usb-affinity usb1 2` (until the next reboot; `usb-affinity` lists the buses) |
 | rtirq only in experiment mode, or always | `sudo switch-rtirq experiment` / `sudo switch-rtirq always` |
@@ -167,6 +170,8 @@ GRUB: "Debian GNU/Linux - Experiment mode, 6 isolated CPUs (2-7)"
    |  kernel: no other tasks, timer ticks, RCU callbacks or IRQs on CPUs 2-7
    v
 systemd (ConditionKernelCommandLine on experiment_mode=1)
+   |-- experiment-mode-cpus.service
+   |                           services, VMs, login sessions -> CPUs 0-1,8-15
    |-- irqbalance.service      does not run
    |-- auto-pin-audio.service  sound card IRQs -> CPUs 2-7, round robin
    |                           (again for every sound card plugged in, via udev)
@@ -241,6 +246,33 @@ rtirq gives the IRQ threads of the drivers in `RTIRQ_NAME_LIST`
 `rtirq-resume.service`, which also runs `rtirq start` (at boot and after
 suspend).
 
+### Other processes
+
+`isolcpus=` takes the isolated CPUs out of the affinity of PID 1, and new
+processes normally inherit that. That breaks once the cpuset controller of
+cgroup v2 is on, which Docker, containerd and other units with
+`Delegate=yes` do. systemd starts every service with
+`clone3(CLONE_INTO_CGROUP)`, the new process lands in another cpuset than
+PID 1, and the kernel gives it every CPU of that cpuset, the isolated ones
+included (`cpuset_fork` in `kernel/cgroup/cpuset.c`). Every service and the
+whole user session then have all CPUs, and a load test showed normal
+processes running on the isolated CPUs.
+
+`experiment-mode-cpus.service` runs `confine-cpus` at boot, before the first
+login, and limits until the next reboot:
+
+| What | Setting |
+| --- | --- |
+| `system.slice` (services), `machine.slice` (virtual machines, containers) | `AllowedCPUs=` the other CPUs |
+| `session-*.scope` (login sessions) | `AllowedCPUs=` the other CPUs |
+| `user@.service` (the user service manager) | `CPUAffinity=` the other CPUs; user units inherit it |
+
+The settings are runtime drop-ins in `/run/systemd/system` and
+`systemctl set-property --runtime`. `user.slice` itself stays unlimited:
+OpenSesame (RT) is a user service, and its launcher pins it to the
+isolated CPUs. A program can still pin itself to an isolated CPU on
+purpose; `isolcpus=` never prevents that.
+
 ### OpenSesame with real-time priority
 
 The menu entry starts the user service `opensesame-psychopy-rt.service`
@@ -252,8 +284,7 @@ priority 40 and sets `OPENSESAME_CPUS=isolated`, which makes
 the CPUs it inherits.
 
 The launcher sets the CPUs itself because the inherited affinity cannot be
-trusted: with the cpuset controller on, the user service manager has every
-CPU in it (see [Things to know](#things-to-know)).
+trusted (see [Other processes](#other-processes)).
 
 `manage-opensesame-affinity` writes a drop-in for this service with
 `CPUAffinity=` (and an empty `OPENSESAME_CPUS`), in
@@ -273,6 +304,7 @@ system one. Such fixed CPUs apply in normal mode too.
 | "no threaded IRQs" | rtirq has nothing to prioritize; add `threadirqs` (setup step 4) |
 | "nohz_full= is set but not active" | The kernel lacks `CONFIG_NO_HZ_FULL`: `grep NO_HZ_FULL /boot/config-$(uname -r)` |
 | A sound card IRQ shows "unchanged" | `journalctl -b -u auto-pin-audio.service`; a managed IRQ is placed by the kernel and cannot be moved |
+| "N processes may also run on the isolated CPUs" | `systemctl status experiment-mode-cpus.service`: did it run? Sessions that started before it keep all CPUs: log in again. Processes started outside systemd's slices are not covered |
 | Other IRQs on isolated CPUs | Pinned by hand (`usb-affinity`), or a managed IRQ whose queue has only isolated CPUs |
 
 ## Things to know
@@ -289,17 +321,16 @@ system one. Such fixed CPUs apply in normal mode too.
   offline and online (CPU hotplug), and then the kernel sets every task in
   a cpuset to the CPUs of that cpuset (`cpuset_update_tasks_cpumask`), and
   the IRQs of a CPU that goes offline move to other CPUs.
-- **Services can have every CPU in their affinity.** systemd starts each
-  service with `clone3(CLONE_INTO_CGROUP)`. When the cpuset controller is
-  on in the root cgroup (`cpuset` in `/sys/fs/cgroup/cgroup.subtree_control`),
-  the new process lands in another cpuset than PID 1, and the kernel sets
-  its affinity to the CPUs of that cpuset (`cpuset_fork` in
-  `kernel/cgroup/cpuset.c`), which include the CPUs isolated at boot. PID 1
-  keeps the normal CPUs; services and the whole user session get all CPUs.
-  Load balancing still does not move them to the isolated CPUs, and
-  `check-isolation` shows whether those stay quiet when no experiment runs.
-  Count the affinities with
+- **Normal processes on isolated CPUs cost OpenSesame time.** SCHED_RR 40
+  wins from normal tasks, but the kernel gives normal tasks up to 50 ms per
+  1000 ms on every CPU through its fair server (`sched_init_dl_servers` in
+  `kernel/sched/deadline.c`). That is why experiment-mode-cpus.service keeps
+  them away. Count the affinities with
   `for p in /proc/[0-9]*; do awk '/^Cpus_allowed_list/ {print $2}' "$p/status"; done | sort | uniq -c`.
+- **Services that set their own CPUs** lose them when
+  experiment-mode-cpus.service limits `system.slice`, if they started
+  before it; Docker containers with `--cpuset-cpus` on isolated CPUs do not
+  start in experiment mode.
 - **The isolated CPUs are fixed per boot.** Choosing another preset means
   rebooting.
 - **USB controller pinning by hand** (`usb-affinity`) lasts until the next
@@ -329,6 +360,8 @@ system one. Such fixed CPUs apply in normal mode too.
 | `/etc/grub.d/11_experiment_mode`, `/usr/lib/devjam/experiment-mode/grub-entries` | Make the GRUB entries during `update-grub` |
 | `/usr/lib/systemd/system/auto-pin-audio.service`, `/usr/lib/udev/rules.d/99-auto-pin-audio.rules` | Pin sound card IRQs in experiment mode |
 | `/usr/lib/systemd/system/irqbalance.service.d/disable-experiment.conf` | No irqbalance in experiment mode |
+| `/usr/lib/systemd/system/experiment-mode-cpus.service`, `/usr/lib/devjam/experiment-mode/confine-cpus` | Keep other processes off the isolated CPUs in experiment mode |
+| `/run/systemd/system/{user@.service,session-.scope,machine.slice}.d/50-experiment-mode-cpus.conf` | Made by `confine-cpus`, gone after reboot |
 | `/etc/systemd/system/rtirq.service.d/experiment_mode.conf`, `.../rtirq-resume.service.d/...` | Made by `switch-rtirq experiment` |
 | `/etc/rtirq.conf` | rtirq priorities (diverted by devjam-system-config-rtirq) |
 | `/usr/lib/systemd/user/opensesame-psychopy-rt.service` | OpenSesame with real-time priority |
@@ -350,4 +383,9 @@ system one. Such fixed CPUs apply in normal mode too.
   default.
 - rtirq (`rtirq.sh`, rncbc/rtirq): only IRQ thread priorities, needs
   PREEMPT_RT or threadirqs.
-- systemd.unit(5): `ConditionKernelCommandLine=`.
+- systemd.unit(5): `ConditionKernelCommandLine=`, drop-ins for unit name
+  prefixes (`session-.scope.d/`); systemd.resource-control(5):
+  `AllowedCPUs=`; systemd source `src/core/exec-invoke.c` (affinity only
+  with `CPUAffinity=`), `src/core/scope.c` (scopes load drop-ins).
+- Linux kernel, `kernel/cgroup/cpuset.c` (`cpuset_fork`, `cpuset_attach`)
+  and `kernel/sched/deadline.c` (fair server, 50 ms per 1000 ms).
