@@ -102,8 +102,43 @@ unit_state() {
     fi
 }
 
+# User space processes that may run on an isolated CPU and on other CPUs
+# too: "COUNT NAME, NAME, NAME". A process limited to isolated CPUs only
+# (OpenSesame, pinned on purpose) does not count; kernel threads neither.
+leaking_processes() {
+    grep -H -E '^(Name|PPid|Cpus_allowed_list):' /proc/[0-9]*/status 2>/dev/null |
+        awk -v iso="$ISOLATED" '
+            function expand(list, set,    parts, n, i, r, c) {
+                n = split(list, parts, ",")
+                for (i = 1; i <= n; i++) {
+                    if (split(parts[i], r, "-") == 2) {
+                        for (c = r[1] + 0; c <= r[2] + 0; c++) set[c] = 1
+                    } else if (parts[i] != "") {
+                        set[parts[i] + 0] = 1
+                    }
+                }
+            }
+            BEGIN { expand(iso, isolated) }
+            {
+                split($0, f, ":")
+                value = $0
+                sub(/^[^:]*:[^:]*:[ \t]*/, "", value)
+                if (f[2] == "Name") name = value
+                else if (f[2] == "PPid") ppid = value
+                else if (f[2] == "Cpus_allowed_list" && ppid != 0 && ppid != 2) {
+                    split("", cpus)
+                    expand(value, cpus)
+                    on_isolated = on_other = 0
+                    for (c in cpus) { if ((c + 0) in isolated) on_isolated = 1; else on_other = 1 }
+                    if (on_isolated && on_other && ++count <= 3)
+                        names = names (names == "" ? "" : ", ") name
+                }
+            }
+            END { print count + 0, names }'
+}
+
 settings() {
-    local warn=() mode=normal threaded=no unit w
+    local warn=() mode=normal threaded=no unit w leaks
     [[ $CMDLINE == *" experiment_mode=1 "* ]] && mode=experiment
     if [[ $(uname -v) == *PREEMPT_RT* ]]; then
         threaded="yes (PREEMPT_RT)"
@@ -113,7 +148,7 @@ settings() {
 
     echo "${BOLD}Mode:${RESET} $mode    ${BOLD}Kernel:${RESET} $(uname -r)    ${BOLD}Threaded IRQs:${RESET} $threaded"
     echo "${BOLD}Isolated (isolcpus):${RESET} ${ISOLATED:--}    ${BOLD}nohz_full:${RESET} ${NOHZ_FULL:--}    ${BOLD}irqaffinity:${RESET} $(param irqaffinity)"
-    for unit in irqbalance rtirq auto-pin-audio; do
+    for unit in irqbalance rtirq auto-pin-audio experiment-mode-cpus; do
         printf '%s%s:%s %s  ' "$BOLD" "$unit" "$RESET" "$(unit_state "$unit.service")"
     done
     echo
@@ -126,6 +161,12 @@ settings() {
     fi
     if [ "$mode" = experiment ] && [ "$threaded" = no ]; then
         warn+=("no threaded IRQs, so rtirq has no IRQ threads to prioritize")
+    fi
+    if [ -n "$ISOLATED" ]; then
+        leaks=$(leaking_processes)
+        if [ "${leaks%% *}" != 0 ]; then
+            warn+=("${leaks%% *} processes may also run on the isolated CPUs (${leaks#* }, ...): experiment-mode-cpus.service not active, or started after the login?")
+        fi
     fi
     for w in "${warn[@]}"; do echo "${RED}Warning:${RESET} $w"; done
 }
