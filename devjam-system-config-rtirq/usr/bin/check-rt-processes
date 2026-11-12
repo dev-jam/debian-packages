@@ -5,18 +5,53 @@
 # Lists the real-time threads (SCHED_FIFO = FF, SCHED_RR = RR,
 # SCHED_DEADLINE = DLN), highest priority first: IRQ threads (rtirq),
 # PipeWire, OpenSesame (RT service) and so on. PSR is the CPU the thread
-# last ran on.
+# last ran on, CPUS the CPUs it may run on.
+#
+# Kernel threads at a default priority (1, 50 or 99: per-CPU threads such as
+# migration/N and ktimers/N, and IRQ threads rtirq did not raise) are left
+# out unless -a is given.
 
 usage() {
-    echo "Usage: ${0##*/} [-1] [SECONDS]   (-1: list once; default: refresh every 0.5 s)"
+    cat <<EOF
+Usage: ${0##*/} [-a] [-1] [SECONDS]
+  -a        also list kernel threads at a default priority (1, 50, 99)
+  -1        list once
+  SECONDS   refresh interval (default 0.5)
+EOF
 }
 
-case "${1:-0.5}" in
-    -1|--once)
-        ps -eLo pid,tid,cls,rtprio,psr,comm --sort=-rtprio |
-            awk 'NR == 1 || $3 ~ /^(FF|RR|DLN)$/'
-        ;;
-    -h|--help) usage ;;
-    *[!0-9.]*) usage >&2; exit 2 ;;
-    *) exec watch -n "${1:-0.5}" "$(printf '%q' "$0") -1" ;;
-esac
+ALL=0 ONCE=0 INTERVAL=0.5
+for arg in "$@"; do
+    case "$arg" in
+        -a|--all) ALL=1 ;;
+        -1|--once) ONCE=1 ;;
+        -h|--help) usage; exit 0 ;;
+        *[!0-9.]*|"") usage >&2; exit 2 ;;
+        *) INTERVAL=$arg ;;
+    esac
+done
+
+if [ "$ONCE" = 0 ]; then
+    exec watch -n "$INTERVAL" "$(printf '%q' "$0") -1$([ "$ALL" = 1 ] && echo " -a")"
+fi
+
+printf '%7s %7s %-3s %6s %3s  %-12s %s\n' PID TID CLS RTPRIO PSR CPUS COMMAND
+ps -eLo pid=,tid=,ppid=,cls=,rtprio=,psr=,comm= --sort=-rtprio |
+    awk -v all="$ALL" '
+        $4 !~ /^(FF|RR|DLN)$/ { next }
+        # Kernel threads are children of kthreadd (PID 2).
+        !all && ($3 == 2 || $1 == 2) && ($5 == 1 || $5 == 50 || $5 == 99) { hidden++; next }
+        {
+            comm = $7
+            for (i = 8; i <= NF; i++) comm = comm " " $i
+            print $1, $2, $4, $5, $6, comm
+        }
+        END { print "-", hidden + 0 }' |
+    while read -r pid tid cls prio psr comm; do
+        if [ "$pid" = - ]; then
+            [ "$tid" -gt 0 ] && echo "($tid kernel threads at a default priority not shown; -a lists them)"
+            continue
+        fi
+        cpus=$(awk '/^Cpus_allowed_list:/ { print $2 }' "/proc/$pid/task/$tid/status" 2>/dev/null)
+        printf '%7s %7s %-3s %6s %3s  %-12s %s\n' "$pid" "$tid" "$cls" "$prio" "$psr" "${cpus:--}" "$comm"
+    done
