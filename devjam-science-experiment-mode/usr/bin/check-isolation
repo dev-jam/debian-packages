@@ -71,8 +71,39 @@ param() {  # value of a kernel parameter, or "-"
     echo "${value:--}"
 }
 
+# State of a unit in one word. A oneshot service without RemainAfterExit
+# (auto-pin-audio) is "inactive" once it has run, and a unit whose
+# ConditionKernelCommandLine failed (irqbalance in experiment mode) is
+# "inactive" too, so tell those apart.
+unit_state() {
+    local key value load="" active="" result="" cond="" cond_ts=0 exit_ts=0
+    while IFS='=' read -r key value; do
+        case "$key" in
+            LoadState) load=$value ;;
+            ActiveState) active=$value ;;
+            Result) result=$value ;;
+            ConditionResult) cond=$value ;;
+            ConditionTimestampMonotonic) cond_ts=${value:-0} ;;
+            ExecMainExitTimestampMonotonic) exit_ts=${value:-0} ;;
+        esac
+    done < <(systemctl show -p LoadState -p ActiveState -p Result -p ConditionResult \
+                 -p ConditionTimestampMonotonic -p ExecMainExitTimestampMonotonic "$1" 2>/dev/null)
+
+    if [ -z "$load" ]; then
+        echo unknown
+    elif [ "$load" = not-found ]; then
+        echo "not installed"
+    elif [ "$active" = inactive ] && [ "$cond_ts" != 0 ] && [ "$cond" = no ]; then
+        echo skipped
+    elif [ "$active" = inactive ] && [ "$exit_ts" != 0 ] && [ "$result" = success ]; then
+        echo "done"
+    else
+        echo "$active"
+    fi
+}
+
 settings() {
-    local warn=() mode=normal threaded=no unit state w
+    local warn=() mode=normal threaded=no unit w
     [[ $CMDLINE == *" experiment_mode=1 "* ]] && mode=experiment
     if [[ $(uname -v) == *PREEMPT_RT* ]]; then
         threaded="yes (PREEMPT_RT)"
@@ -83,8 +114,7 @@ settings() {
     echo "${BOLD}Mode:${RESET} $mode    ${BOLD}Kernel:${RESET} $(uname -r)    ${BOLD}Threaded IRQs:${RESET} $threaded"
     echo "${BOLD}Isolated (isolcpus):${RESET} ${ISOLATED:--}    ${BOLD}nohz_full:${RESET} ${NOHZ_FULL:--}    ${BOLD}irqaffinity:${RESET} $(param irqaffinity)"
     for unit in irqbalance rtirq auto-pin-audio; do
-        state=$(systemctl is-active "$unit.service" 2>/dev/null)
-        printf '%s%s:%s %s  ' "$BOLD" "$unit" "$RESET" "${state:-unknown}"
+        printf '%s%s:%s %s  ' "$BOLD" "$unit" "$RESET" "$(unit_state "$unit.service")"
     done
     echo
 
