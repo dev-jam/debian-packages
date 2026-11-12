@@ -1,4 +1,3 @@
-# USB audio devices
-ACTION=="add", SUBSYSTEM=="usb", ATTR{bInterfaceClass}=="01", TAG+="systemd", ENV{SYSTEMD_WANTS}="auto-pin-audio.service"
-# Internal audio devices
-ACTION=="add", SUBSYSTEM=="sound", TAG+="systemd", ENV{SYSTEMD_WANTS}="auto-pin-audio.service"
+# Pin the IRQs of a sound card (internal or USB) to the isolated CPUs when
+# it is added. auto-pin-audio.service only runs in experiment mode.
+ACTION=="add", SUBSYSTEM=="sound", KERNEL=="card[0-9]*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="auto-pin-audio.service"

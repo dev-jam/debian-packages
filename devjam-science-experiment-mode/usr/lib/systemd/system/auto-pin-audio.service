@@ -1,12 +1,15 @@
 [Unit]
-Description=Auto-pin audio IRQs to isolated cores
-After=systemd-udev-settle.service sound.target
-ConditionPathExists=/usr/bin/auto-pin-audio-irq
+Description=Pin sound card IRQs to the isolated CPUs (experiment mode)
+# Only in experiment mode (GRUB entries with experiment_mode=1).
+ConditionKernelCommandLine=experiment_mode=1
+After=sound.target
 
 [Service]
+# Started at boot and, by 99-auto-pin-audio.rules, for every sound card that
+# is added. Without RemainAfterExit the unit becomes inactive after each run,
+# so a later sound card (USB audio interface) starts it again.
 Type=oneshot
 ExecStart=/usr/bin/auto-pin-audio-irq
-RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target

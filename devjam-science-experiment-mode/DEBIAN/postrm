@@ -13,10 +13,8 @@ case "$1" in
             deb-systemd-invoke restart 'irqbalance.service' 'rtirq.service' >/dev/null 2>&1 || true
         fi
 
-        # Reload udev rules and trigger events
         if command -v udevadm >/dev/null 2>&1; then
             udevadm control --reload || true
-            udevadm trigger || true
         fi
 
         # Remove the GRUB script that update-grub-custom-experiment-mode
