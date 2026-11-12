@@ -252,10 +252,8 @@ priority 40 and sets `OPENSESAME_CPUS=isolated`, which makes
 the CPUs it inherits.
 
 The launcher sets the CPUs itself because the inherited affinity cannot be
-trusted: the user service manager can have every CPU in it, isolated ones
-included. The kernel gives a task that moves into a cgroup with the cpuset
-controller the CPUs of that cpuset (`kernel/cgroup/cpuset.c`), and those
-include CPUs isolated at boot.
+trusted: with the cpuset controller on, the user service manager has every
+CPU in it (see [Things to know](#things-to-know)).
 
 `manage-opensesame-affinity` writes a drop-in for this service with
 `CPUAffinity=` (and an empty `OPENSESAME_CPUS`), in
@@ -286,7 +284,22 @@ system one. Such fixed CPUs apply in normal mode too.
   OpenSesame (RT), between the isolated CPUs. Give a program as many
   isolated CPUs as it really uses.
 - **SMT.** An isolated CPU still shares its core with its SMT sibling. The
-  kernel documentation advises against SMT for isolation (`nosmt`).
+  kernel documentation advises against SMT for isolation (`nosmt`). Switch
+  SMT at boot rather than during an experiment: `smt-manager` takes CPUs
+  offline and online (CPU hotplug), and then the kernel sets every task in
+  a cpuset to the CPUs of that cpuset (`cpuset_update_tasks_cpumask`), and
+  the IRQs of a CPU that goes offline move to other CPUs.
+- **Services can have every CPU in their affinity.** systemd starts each
+  service with `clone3(CLONE_INTO_CGROUP)`. When the cpuset controller is
+  on in the root cgroup (`cpuset` in `/sys/fs/cgroup/cgroup.subtree_control`),
+  the new process lands in another cpuset than PID 1, and the kernel sets
+  its affinity to the CPUs of that cpuset (`cpuset_fork` in
+  `kernel/cgroup/cpuset.c`), which include the CPUs isolated at boot. PID 1
+  keeps the normal CPUs; services and the whole user session get all CPUs.
+  Load balancing still does not move them to the isolated CPUs, and
+  `check-isolation` shows whether those stay quiet when no experiment runs.
+  Count the affinities with
+  `for p in /proc/[0-9]*; do awk '/^Cpus_allowed_list/ {print $2}' "$p/status"; done | sort | uniq -c`.
 - **The isolated CPUs are fixed per boot.** Choosing another preset means
   rebooting.
 - **USB controller pinning by hand** (`usb-affinity`) lasts until the next
