@@ -175,7 +175,7 @@ systemd (ConditionKernelCommandLine on experiment_mode=1)
    |-- experiment-mode-cpus.service
    |                           services, VMs, login sessions, IRQs -> CPUs 0-1,8-15
    |-- irqbalance.service      does not run
-   |-- auto-pin-audio.service  then: sound card IRQs -> CPUs 2-7, round robin
+   |-- auto-pin-audio.service  then: sound card IRQs -> CPUs 2-7, spread
    |                           (again for every sound card plugged in, via udev)
    |-- rtirq.service           IRQ threads get SCHED_FIFO priorities
    |   rtirq-resume.service    (always, or only in experiment mode: switch-rtirq)
@@ -222,11 +222,24 @@ normal entries; `GRUB_DEFAULT` can name one.
 
 `auto-pin-audio-irq` (run by `auto-pin-audio.service`) takes every sound
 card in `/sys/class/sound`, finds the PCI device above it and pins that
-device's IRQs to the isolated CPUs, one CPU per IRQ in turn. For a USB audio
-interface this is the IRQ of its USB host controller: a USB device has no
-IRQ of its own, so the other devices on that controller (button box,
-keyboard) share it. The service runs at boot and, through
-`99-auto-pin-audio.rules`, for every sound card that is added later.
+device's IRQs to the isolated CPUs. For a USB audio interface this is the
+IRQ of its USB host controller: a USB device has no IRQ of its own, so the
+other devices on that controller (button box, keyboard) share it. The
+service runs at boot and, through `99-auto-pin-audio.rules`, for every
+sound card that is added later.
+
+An IRQ that already runs on isolated CPUs only stays where it is, so
+plugging in a sound card does not move the IRQs of the others. Every other
+IRQ goes to the isolated CPU with the fewest sound card IRQs, the lowest
+number first; the journal marks the ones that stayed with `(stays)`. Only
+IRQs a driver has set up count: a USB host controller can reserve several
+MSI-X vectors (xhci_hcd reserves 8) and use one. Unplugging a sound card
+leaves its IRQ where it is until the next reboot.
+
+`udevadm info` of a sound card does not show `SYSTEMD_WANTS`: the rule sets
+it on the `add` event, which starts the service, and the card's later
+`change` event (`78-sound-card.rules` of systemd) replaces the stored
+properties.
 
 ### irqbalance
 

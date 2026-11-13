@@ -2,9 +2,12 @@
 # Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Pins the IRQs of all sound cards to the isolated CPUs (isolcpus=), one
-# CPU per IRQ in turn. For a USB audio interface that is the IRQ of its USB
-# host controller, which it shares with the other devices on that controller.
+# Pins the IRQs of all sound cards to the isolated CPUs (isolcpus=). For a
+# USB audio interface that is the IRQ of its USB host controller, which it
+# shares with the other devices on that controller. An IRQ that already runs
+# on isolated CPUs only stays where it is, so a sound card plugged in later
+# does not move the IRQs of the others; every other IRQ goes to the isolated
+# CPU with the fewest sound card IRQs (the lowest number first).
 #
 # Run by auto-pin-audio.service in experiment mode, at boot and whenever a
 # sound card is added. Output: journalctl -u auto-pin-audio.service
@@ -78,17 +81,40 @@ if [ ${#cards[@]} -eq 0 ]; then
     exit 0
 fi
 
+irqs=$(printf '%s\n' "${!cards[@]}" | sort -n)
+
+# Sound card IRQs per isolated CPU; IRQs already on isolated CPUs only stay.
+declare -A count=() keep=()
+for irq in $irqs; do
+    current=$(cat "/proc/irq/$irq/smp_affinity_list" 2>/dev/null)
+    stays=1
+    for cpu in $(expand_cpus "$current"); do
+        [[ " ${cpus[*]} " == *" $cpu "* ]] || stays=0
+    done
+    if [ -n "$current" ] && [ "$stays" = 1 ]; then
+        keep[$irq]=$current
+        for cpu in $(expand_cpus "$current"); do count[$cpu]=$((${count[$cpu]:-0} + 1)); done
+    fi
+done
+
 echo "Isolated CPUs: $isolated"
 printf '%-6s %-24s %s\n' IRQ "Sound card" CPU
-i=0
-for irq in $(printf '%s\n' "${!cards[@]}" | sort -n); do
-    cpu=${cpus[i % ${#cpus[@]}]}
-    if echo "$cpu" > "/proc/irq/$irq/smp_affinity_list" 2>/dev/null; then
-        result=$cpu
-        i=$((i + 1))
+for irq in $irqs; do
+    if [ -n "${keep[$irq]:-}" ]; then
+        result="${keep[$irq]} (stays)"
     else
-        # Managed IRQs are placed by the kernel and cannot be moved.
-        result="unchanged ($(cat "/proc/irq/$irq/smp_affinity_list" 2>/dev/null))"
+        # The isolated CPU with the fewest sound card IRQs, lowest number first.
+        best=${cpus[0]}
+        for cpu in "${cpus[@]}"; do
+            ((${count[$cpu]:-0} < ${count[$best]:-0})) && best=$cpu
+        done
+        if echo "$best" 2>/dev/null > "/proc/irq/$irq/smp_affinity_list"; then
+            result=$best
+            count[$best]=$((${count[$best]:-0} + 1))
+        else
+            # Managed IRQs are placed by the kernel and cannot be moved.
+            result="unchanged ($(cat "/proc/irq/$irq/smp_affinity_list" 2>/dev/null))"
+        fi
     fi
     printf '%-6s %-24s %s\n' "$irq" "${cards[$irq]}" "$result"
 done
