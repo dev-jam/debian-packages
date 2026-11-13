@@ -7,14 +7,15 @@
 # PipeWire, OpenSesame (RT service) and so on. PSR is the CPU the thread
 # last ran on, CPUS the CPUs it may run on.
 #
-# Kernel threads at a default priority (1, 50 or 99: per-CPU threads such as
-# migration/N and ktimers/N, and IRQ threads rtirq did not raise) are left
-# out unless -a is given.
+# Kernel threads at a default priority (1, 49, 50 or 99: per-CPU threads
+# such as migration/N and ktimers/N, and IRQ threads rtirq did not raise;
+# 49 is the default of the secondary threads irq/N-s-NAME) are left out
+# unless -a is given.
 
 usage() {
     cat <<EOF
 Usage: ${0##*/} [-a] [-1] [SECONDS]
-  -a        also list kernel threads at a default priority (1, 50, 99)
+  -a        also list kernel threads at a default priority (1, 49, 50, 99)
   -1        list once
   SECONDS   refresh interval (default 0.5)
 EOF
@@ -40,7 +41,7 @@ ps -eLo pid=,tid=,ppid=,cls=,rtprio=,psr=,comm= --sort=-rtprio |
     awk -v all="$ALL" '
         $4 !~ /^(FF|RR|DLN)$/ { next }
         # Kernel threads are children of kthreadd (PID 2).
-        !all && ($3 == 2 || $1 == 2) && ($5 == 1 || $5 == 50 || $5 == 99) { hidden++; next }
+        !all && ($3 == 2 || $1 == 2) && ($5 == 1 || $5 == 49 || $5 == 50 || $5 == 99) { hidden++; next }
         {
             comm = $7
             for (i = 8; i <= NF; i++) comm = comm " " $i
