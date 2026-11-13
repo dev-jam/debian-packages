@@ -42,14 +42,19 @@ expand_cpus() {
     echo "${out[*]}"
 }
 
-# IRQs of a PCI device: its MSI/MSI-X vectors, else its legacy IRQ.
+# IRQs a driver has set up for a PCI device: its MSI/MSI-X vectors, else its
+# legacy IRQ. A device can reserve more vectors than its driver requests
+# (xhci_hcd: 8, of which 1 in use); those have no /proc/irq/N.
 pci_irqs() {
-    local dev="/sys/bus/pci/devices/$1"
+    local dev="/sys/bus/pci/devices/$1" irq irqs
     if [ -n "$(ls -A "$dev/msi_irqs" 2>/dev/null)" ]; then
-        ls "$dev/msi_irqs"
-    elif [ "$(cat "$dev/irq" 2>/dev/null || echo 0)" != 0 ]; then
-        cat "$dev/irq"
+        irqs=$(ls "$dev/msi_irqs")
+    else
+        irqs=$(cat "$dev/irq" 2>/dev/null)
     fi
+    for irq in $irqs; do
+        if [ "$irq" != 0 ] && [ -d "/proc/irq/$irq" ]; then echo "$irq"; fi
+    done
 }
 
 read -ra cpus <<< "$(expand_cpus "$isolated")"
