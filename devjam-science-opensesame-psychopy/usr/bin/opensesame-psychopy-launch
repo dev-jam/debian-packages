@@ -18,6 +18,11 @@ if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
 fi
 source "$VENV_DIR/bin/activate"
 
+# The inline_script editor (pyqt_code_editor) lints with Ruff, which writes a
+# .ruff_cache directory next to the experiment. The cache gives no speed gain
+# for scripts this small, so it is off. Set RUFF_NO_CACHE=false to keep it.
+export RUFF_NO_CACHE="${RUFF_NO_CACHE:-true}"
+
 if [[ ${OPENSESAME_CPUS:-} == isolated ]]; then
     isolated=$(cat /sys/devices/system/cpu/isolated 2>/dev/null)
     fixed=$(systemctl --user show -p CPUAffinity --value "$SERVICE" 2>/dev/null)
