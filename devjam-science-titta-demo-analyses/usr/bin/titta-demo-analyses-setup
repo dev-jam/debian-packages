@@ -1,0 +1,174 @@
+#!/bin/bash
+# titta-demo-analyses-setup - copy the Titta demo analyses to the Desktop
+#
+# Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Usage:
+#   titta-demo-analyses-setup             copy the packaged version to the Desktop
+#   titta-demo-analyses-setup --autostart same, without a notification, and only
+#                                         if the folder is not there yet; run
+#                                         once per user via devjam-run-once
+#   titta-demo-analyses-setup --download  download the latest version of the
+#                                         staging branch from GitHub instead,
+#                                         to titta_demo_analyses_staging_<commit>
+#
+# Existing folders on the Desktop are never overwritten: if the folder already
+# exists, a new folder with the date and time in its name is made.
+
+set -euo pipefail
+
+SRC=/usr/share/titta-demo-analyses
+REPO=dev-jam/Titta
+BRANCH=staging
+NAME=titta_demo_analyses
+
+mode=copy
+interactive=1
+
+usage() {
+    sed -n '2,16s/^# \{0,1\}//p' "$0"
+}
+
+case "${1:-}" in
+    '') ;;
+    --autostart) mode=copy; interactive=0 ;;
+    --download) mode=download ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+esac
+
+# Show a message: as desktop notification when started from the menu,
+# always on stdout/stderr
+message() {
+    local level=$1; shift
+    if [ "$level" = error ]; then
+        echo "titta-demo-analyses-setup: $*" >&2
+    else
+        echo "$*"
+    fi
+    if [ "$interactive" = 1 ] && command -v notify-send >/dev/null 2>&1; then
+        local icon=dialog-information
+        [ "$level" = error ] && icon=dialog-error
+        notify-send --app-name="Titta demo analyses" --icon="$icon" \
+            "Titta demo analyses" "$*" || true
+    fi
+}
+
+desktop_dir() {
+    local dir="" dirs_file="${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs"
+    if command -v xdg-user-dir >/dev/null 2>&1; then
+        dir=$(xdg-user-dir DESKTOP 2>/dev/null || true)
+    elif [ -f "$dirs_file" ]; then
+        # Same file xdg-user-dir reads, e.g. XDG_DESKTOP_DIR="$HOME/Bureaublad"
+        # shellcheck disable=SC1090
+        dir=$(. "$dirs_file" 2>/dev/null; echo "${XDG_DESKTOP_DIR:-}")
+    fi
+    # xdg-user-dir returns $HOME if no Desktop folder is configured
+    if [ -z "$dir" ] || [ "$dir" = "$HOME" ]; then
+        dir="$HOME/Desktop"
+    fi
+    echo "$dir"
+}
+
+# Return a folder name on the Desktop that does not exist yet:
+# <base>, else <base>_<date>_<time>, else <base>_<date>_<time>_2, _3, ...
+new_target() {
+    local base="$1" target stamp n=2
+    target="$desktop/$base"
+    if [ -e "$target" ]; then
+        stamp=$(date +%Y%m%d_%H%M%S)
+        target="$desktop/${base}_$stamp"
+        while [ -e "$target" ]; do
+            target="$desktop/${base}_${stamp}_$n"
+            n=$((n + 1))
+        done
+    fi
+    echo "$target"
+}
+
+desktop=$(desktop_dir)
+
+if [ "$mode" = copy ]; then
+    # Autostart: leave an existing folder alone
+    if [ "$interactive" = 0 ] && [ -e "$desktop/$NAME" ]; then
+        exit 0
+    fi
+
+    if [ ! -d "$SRC" ]; then
+        message error "$SRC not found"
+        exit 1
+    fi
+
+    mkdir -p "$desktop"
+    target=$(new_target "$NAME")
+    cp -r "$SRC" "$target"
+    chmod -R u+w "$target"
+    message info "Copied to $target"
+    exit 0
+fi
+
+# --download: latest version of the staging branch from GitHub
+for tool in curl tar; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        message error "$tool is not installed, cannot download"
+        exit 1
+    fi
+done
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# Commit of the branch, so the folder can be traced back to an exact version.
+# Without it the branch is downloaded and the commit is recorded as unknown.
+sha=""
+sha_note=""
+if answer=$(curl -fsS --max-time 20 --retry 2 --retry-delay 5 \
+            -H "Accept: application/vnd.github.sha" \
+            "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>&1); then
+    if [[ "$answer" =~ ^[0-9a-f]{40}$ ]]; then
+        sha=$answer
+    else
+        sha_note="unexpected answer from the GitHub API"
+    fi
+else
+    sha_note="GitHub API: ${answer##*curl: }"
+fi
+
+if [ -n "$sha" ]; then
+    url="https://github.com/$REPO/archive/$sha.tar.gz"
+else
+    url="https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz"
+fi
+
+if ! answer=$(curl -fsSL --max-time 300 --retry 1 \
+              -o "$tmp/source.tar.gz" "$url" 2>&1); then
+    message error "Download failed ($url): ${answer##*curl: }"
+    exit 1
+fi
+
+mkdir "$tmp/source"
+tar -xzf "$tmp/source.tar.gz" -C "$tmp/source"
+top=$(find "$tmp/source" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+if [ -z "$top" ] || [ ! -d "$top/demo_analyses" ]; then
+    message error "No demo_analyses folder in $url"
+    exit 1
+fi
+
+cat > "$top/demo_analyses/VERSION" <<EOF
+source:     https://github.com/$REPO
+branch:     $BRANCH
+commit:     ${sha:-unknown}
+downloaded: $(date --iso-8601=seconds)
+EOF
+
+mkdir -p "$desktop"
+# Folder name with the commit, or the date if the commit is unknown
+target=$(new_target "${NAME}_${BRANCH}_${sha:0:7}")
+[ -n "$sha" ] || target=$(new_target "${NAME}_${BRANCH}_$(date +%Y%m%d)")
+mv "$top/demo_analyses" "$target"
+if [ -n "$sha" ]; then
+    message info "Downloaded ${sha:0:7} to $target"
+else
+    message info "Downloaded to $target (commit unknown: $sha_note)"
+fi

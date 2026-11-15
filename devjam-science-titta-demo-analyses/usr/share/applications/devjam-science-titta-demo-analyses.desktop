@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Titta demo analyses
+GenericName=Eye-tracking analysis scripts
+Comment=Copy the Titta eye-tracking analysis scripts to the Desktop
+Exec=titta-demo-analyses-setup
+Icon=applications-science
+Terminal=false
+Categories=Science;DataVisualization;
+Keywords=Titta;eye tracking;Tobii;fixations;heatmap;AOI;
+Actions=download-staging;
+
+[Desktop Action download-staging]
+Name=Download latest version from GitHub (staging)
+Exec=titta-demo-analyses-setup --download

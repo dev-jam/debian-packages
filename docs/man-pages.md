@@ -2,8 +2,8 @@
 
 Debian Policy (section 12.1) says that each program, utility and function
 should have an associated manual page. None of the commands in these
-packages has one yet, so lintian reports `no-manual-page` for 83 commands
-(84 with `s-benchmark-copy`).
+packages has one yet, so lintian reports `no-manual-page` for 84 commands
+(85 with `s-benchmark-copy`).
 The warning is overridden in each package (`usr/share/lintian/overrides/`)
 until man pages are written; this file records which commands actually need
 one.
@@ -84,7 +84,8 @@ is the honest long-term answer for these.
 - **Backends of desktop entries and service menus**:
   `system-clean-apt` (apt-cleaner), `opensesame-psychopy-launch`,
   `sigmund-analyst-psychopy-launch`, `plasma-restart`, `apply-plasma-theme`,
-  `devjam-run-once` (XDG autostart entries),
+  `devjam-run-once` (XDG autostart entries), `titta-demo-analyses-setup`
+  (menu and autostart entry of devjam-science-titta-demo-analyses),
   `check-flac`, `csv2tsv`, `evtx2xml`, `change-fourcc`,
   `convert-folder-to-video-iso`, `copy-quoted-paths`, `compare-diffoscope`,
   `extract-microvideo`, `mediainfo-gui-multi`, `check-dupes-fclones`,
