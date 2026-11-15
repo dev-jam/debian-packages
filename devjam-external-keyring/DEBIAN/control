@@ -1,5 +1,5 @@
 Package: devjam-external-keyring
-Version: 1.2-1
+Version: 1.3-1
 Section: misc
 Priority: optional
 Architecture: all
@@ -7,5 +7,6 @@ Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: OpenPGP keys for external apt repositories
  Signing keys of third-party apt repositories used on dev-jam systems,
  such as Signal, Syncthing, OnlyOffice, XanMod, Liquorix, XLibre,
- Waydroid, SR Research and the OpenSesame (cogscinl) PPA, installed in
- /usr/share/keyrings for use with Signed-By in deb822 .sources files.
+ Waydroid, SR Research, the GitHub CLI and the OpenSesame (cogscinl)
+ PPA, installed in /usr/share/keyrings for use with Signed-By in
+ deb822 .sources files.
