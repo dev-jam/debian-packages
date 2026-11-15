@@ -55,7 +55,7 @@ print a usage text, so `help2man` is cheap here.
 | devjam-tools | `appimage2deb` | yes | Repackage an AppImage as a .deb |
 | devjam-tools | `update-local-debs` | yes | Update upstream GitHub .debs in a local apt repository |
 | devjam-tools | `update-artcraft-repo` | yes | Update the ArtCraft debs in a local apt repository |
-| devjam-science-tools | `update-titta-demo-analyses` | yes | Refresh the payload of devjam-science-titta-demo-analyses from git |
+| devjam-science-tools | `update-titta-demo` | yes | Refresh the payload of devjam-science-titta-demo from git |
 | devjam-tools | `nspawn` | yes | systemd-nspawn wrapper for live-build and rescue |
 | devjam-tools | `audio-monitor` | yes | Monitor ALSA cards |
 | devjam-s-benchmark | `s-benchmark-copy` | yes | Copy the S benchmark suite to the disk under test |

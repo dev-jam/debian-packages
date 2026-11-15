@@ -1,26 +1,27 @@
 #!/bin/bash
-# update-titta-demo-analyses - refresh the payload of devjam-science-titta-demo-analyses
+# update-titta-demo - refresh the payload of devjam-science-titta-demo
 #
 # Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Usage: update-titta-demo-analyses <package-folder> [ref]
+# Usage: update-titta-demo <package-folder> [ref]
 #
-#   <package-folder>  the package tree, e.g. ./devjam-science-titta-demo-analyses
+#   <package-folder>  the package tree, e.g. ./devjam-science-titta-demo
 #   [ref]             branch, tag or commit of github.com/dev-jam/Titta
 #                     (default: staging)
 #
-# Replaces usr/share/titta-demo-analyses in the package tree with the
-# demo_analyses folder of that commit and writes the exact commit to VERSION.
-# The payload changes, so bump the upstream version in DEBIAN/control
-# (e.g. 1.0-1 -> 1.1-1) before building.
+# Replaces usr/share/titta-demo in the package tree with the folders
+# demo_experiments and demo_analyses of that commit and writes the exact
+# commit to VERSION. The payload changes, so bump the upstream version in
+# DEBIAN/control (e.g. 1.0-1 -> 1.1-1) before building.
 
 set -euo pipefail
 
 REPO_URL=https://github.com/dev-jam/Titta.git
+FOLDERS=(demo_experiments demo_analyses)
 
 usage() {
-    sed -n '2,16s/^# \{0,1\}//p' "$0"
+    sed -n '2,17s/^# \{0,1\}//p' "$0"
 }
 
 case "${1:-}" in
@@ -40,7 +41,7 @@ fi
 
 pkg=$(realpath "$1")
 ref=${2:-staging}
-dest="$pkg/usr/share/titta-demo-analyses"
+dest="$pkg/usr/share/titta-demo"
 
 if [ ! -f "$pkg/DEBIAN/control" ]; then
     echo "Not a package folder (no DEBIAN/control): $pkg" >&2
@@ -59,12 +60,14 @@ if [ -z "$sha" ]; then
     echo "Unknown branch, tag or commit: $ref" >&2
     exit 1
 fi
-git -C "$tmp/titta" checkout --quiet "$sha" -- demo_analyses
+git -C "$tmp/titta" checkout --quiet "$sha" -- "${FOLDERS[@]}"
 date=$(git -C "$tmp/titta" log -1 --format=%cd --date=short "$sha")
 
 rm -rf "$dest"
-mkdir -p "$(dirname "$dest")"
-cp -r "$tmp/titta/demo_analyses" "$dest"
+mkdir -p "$dest"
+for folder in "${FOLDERS[@]}"; do
+    cp -r "$tmp/titta/$folder" "$dest/$folder"
+done
 
 cat > "$dest/VERSION" <<EOF
 source:     https://github.com/dev-jam/Titta

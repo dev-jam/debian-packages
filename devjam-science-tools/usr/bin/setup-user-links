@@ -16,7 +16,9 @@ make_link() {
     src="$1"
     target="$2"
     if [ -e "$src" ]; then
-        ln -sf "$src" "$target"
+        # -n: replace an existing link to a folder instead of creating
+        # a new link inside that folder
+        ln -sfn "$src" "$target"
     fi
 }
 
@@ -43,5 +45,7 @@ make_link /usr/local/share/lab-validation-toolbox "$TARGET_DIR/lab-validation-to
 make_link /usr/share/applications/pipewire-restart.desktop "$TARGET_DIR/pipewire-restart.desktop"
 make_link /usr/share/applications/switch2alsa.desktop "$TARGET_DIR/switch2alsa.desktop"
 make_link /usr/share/applications/switch2pipewire.desktop "$TARGET_DIR/switch2pipewire.desktop"
+# Read-only; users drag demo_analyses or demo_experiments out of it
+make_link /usr/share/titta-demo "$TARGET_DIR/titta-demo"
 
 exit 0

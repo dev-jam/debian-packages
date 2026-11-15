@@ -1,5 +1,5 @@
 Package: devjam-science-tools
-Version: 2.2-1
+Version: 2.3-1
 Section: science
 Priority: optional
 Architecture: all
@@ -10,8 +10,8 @@ Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: Tools and file types for lab computers
  Tools for lab computers: print-system-information (hardware and
  software report), install-psychopy-opensesame, update-psychopy-installer,
- update-tobii-etm, update-titta-demo-analyses (refreshes the payload of
- devjam-science-titta-demo-analyses), make-osexp and setup-user-links. It
- also provides MIME types and icons for OpenSesame and PsychoPy
- experiments, udev rules for Teensy boards and a fixed desktop entry for
- Tobii Pro Eye Tracker Manager.
+ update-tobii-etm, update-titta-demo (refreshes the payload of
+ devjam-science-titta-demo), make-osexp and setup-user-links. It also
+ provides MIME types and icons for OpenSesame and PsychoPy experiments,
+ udev rules for Teensy boards and a fixed desktop entry for Tobii Pro Eye
+ Tracker Manager.
