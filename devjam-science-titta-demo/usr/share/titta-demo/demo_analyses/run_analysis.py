@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Run all data processing and analysis steps of demo_analyses in one go, in the
-order of the README, with the slow gaze videos last:
+order of the README, with the videos last:
 
 1. extract_trial_data.py      data/*.h5        -> trials/
 2. compute_data_quality.py    data/, trials/   -> data_quality/
@@ -9,7 +9,8 @@ order of the README, with the slow gaze videos last:
 4. map fixations to AOIs      output/, AOI_example/AOIs/ -> aoi/
 5. plot_scanpath.py           output/, stimuli/ -> scanpaths/
 6. plot_heatmap.py            output/, stimuli/ -> heatmaps/
-7. plot_gaze_video.py         trials/, output/, stimuli/ -> video_gaze/
+7. plot_heatmap_video.py      trials/, output/, stimuli/ -> heatmap_videos/
+8. plot_gaze_video.py         trials/, output/, stimuli/ -> video_gaze/
 
 Every step runs as a separate Python process from this folder, exactly as if
 the script was started by hand. Settings of each step (screen size, sampling
@@ -35,6 +36,7 @@ RUN_STEPS = {
     'map_aois': True,
     'scanpaths': True,
     'heatmaps': True,
+    'heatmap_video': True,      # one video per stimulus, all participants
     'gaze_video': True,         # slow: one frame per sample
 }
 
@@ -122,6 +124,8 @@ STEPS = [
     ('scanpaths', 'plot_scanpath.py', ['pandas', 'cv2'], str(FIXATION_FILE)),
     ('heatmaps', 'plot_heatmap.py', ['numpy', 'pandas', 'PIL', 'matplotlib'],
      str(FIXATION_FILE)),
+    ('heatmap_video', 'plot_heatmap_video.py',
+     ['numpy', 'pandas', 'PIL', 'matplotlib', 'cv2'], str(FIXATION_FILE)),
     # Last, because it is by far the slowest step
     ('gaze_video', 'plot_gaze_video.py', ['pandas', 'cv2'], str(FIXATION_FILE)),
 ]
