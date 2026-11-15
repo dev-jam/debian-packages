@@ -1,0 +1,26 @@
+Package: devjam-science-titta-demo
+Version: 1.0-1
+Section: science
+Priority: optional
+Architecture: all
+Depends: python3, python3-numpy, python3-pandas, python3-pil, python3-matplotlib, python3-h5py, python3-tables, python3-opencv, python3-i2mc
+Recommends: xdg-user-dirs, curl, libnotify-bin
+Suggests: python3-titta
+Maintainer: Bob Rosbag <debian@bobrosbag.nl>
+Description: Titta demo experiments and analyses for eye-tracking studies
+ The demo_experiments and demo_analyses folders of Titta (Tobii
+ eye-tracker toolbox), from the staging branch of github.com/dev-jam/Titta.
+ .
+ demo_experiments holds the PsychoPy demo experiments (read_me.py and
+ others, also with Tobii Pro Lab and LSL). demo_analyses processes their
+ data: trial extraction, data quality, fixation detection with I2MC,
+ mapping fixations to AOIs with cumulative plots, scanpaths, heatmaps and
+ gaze videos, plus run_analysis.py to run all steps in one go.
+ .
+ Both are installed read-only in /usr/share/titta-demo. To use them, copy
+ a folder to a place of your own, for example from the link that
+ setup-user-links (devjam-science-tools) puts in Desktop/tools, or with
+ the menu entry "Titta demo", which copies everything to the Desktop
+ (folder titta_demo). Its action "Download latest version from GitHub"
+ fetches the current staging branch instead. Existing folders are never
+ overwritten. The exact commit is in the file VERSION.

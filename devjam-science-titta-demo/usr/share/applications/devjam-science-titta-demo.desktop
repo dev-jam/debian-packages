@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Titta demo
+GenericName=Eye-tracking demo experiments and analyses
+Comment=Copy the Titta demo experiments and analysis scripts to the Desktop
+Exec=titta-demo-setup
+Icon=applications-science
+Terminal=false
+Categories=Science;DataVisualization;
+Keywords=Titta;eye tracking;Tobii;PsychoPy;fixations;heatmap;AOI;
+Actions=download-staging;
+
+[Desktop Action download-staging]
+Name=Download latest version from GitHub (staging)
+Exec=titta-demo-setup --download

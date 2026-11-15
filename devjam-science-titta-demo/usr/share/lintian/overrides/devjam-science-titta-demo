@@ -1,0 +1,8 @@
+# The README files describe the folder they are in, and the .txt files are example data; they are part of the demo that users copy to a folder of their own.
+devjam-science-titta-demo: package-contains-documentation-outside-usr-share-doc [usr/share/titta-demo/*]
+
+# Man pages are not written yet; docs/man-pages.md lists which commands need one.
+devjam-science-titta-demo: no-manual-page *
+
+# Upstream demo experiment, installed without the executable bit; it is run with PsychoPy's Python, not through its #! line.
+devjam-science-titta-demo: unusual-interpreter python [usr/share/titta-demo/demo_experiments/anti_saccades.py]

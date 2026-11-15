@@ -1,57 +1,53 @@
 #!/bin/bash
-# titta-demo-analyses-setup - copy the Titta demo analyses to the Desktop
+# titta-demo-setup - copy the Titta demo experiments and analyses to the Desktop
 #
 # Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Usage:
-#   titta-demo-analyses-setup             copy the packaged version to the Desktop
-#   titta-demo-analyses-setup --autostart same, without a notification, and only
-#                                         if the folder is not there yet; run
-#                                         once per user via devjam-run-once
-#   titta-demo-analyses-setup --download  download the latest version of the
-#                                         staging branch from GitHub instead,
-#                                         to titta_demo_analyses_staging_<commit>
+#   titta-demo-setup             copy the packaged version to the Desktop
+#                                (folder titta_demo)
+#   titta-demo-setup --download  download the latest version of the staging
+#                                branch from GitHub instead, to
+#                                titta_demo_staging_<commit>
 #
 # Existing folders on the Desktop are never overwritten: if the folder already
 # exists, a new folder with the date and time in its name is made.
 
 set -euo pipefail
 
-SRC=/usr/share/titta-demo-analyses
+SRC=/usr/share/titta-demo
 REPO=dev-jam/Titta
 BRANCH=staging
-NAME=titta_demo_analyses
+NAME=titta_demo
+FOLDERS=(demo_experiments demo_analyses)
 
 mode=copy
-interactive=1
 
 usage() {
-    sed -n '2,16s/^# \{0,1\}//p' "$0"
+    sed -n '2,15s/^# \{0,1\}//p' "$0"
 }
 
 case "${1:-}" in
     '') ;;
-    --autostart) mode=copy; interactive=0 ;;
     --download) mode=download ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
 esac
 
-# Show a message: as desktop notification when started from the menu,
-# always on stdout/stderr
+# Show a message on stdout/stderr and as a desktop notification
 message() {
     local level=$1; shift
     if [ "$level" = error ]; then
-        echo "titta-demo-analyses-setup: $*" >&2
+        echo "titta-demo-setup: $*" >&2
     else
         echo "$*"
     fi
-    if [ "$interactive" = 1 ] && command -v notify-send >/dev/null 2>&1; then
+    if command -v notify-send >/dev/null 2>&1; then
         local icon=dialog-information
         [ "$level" = error ] && icon=dialog-error
-        notify-send --app-name="Titta demo analyses" --icon="$icon" \
-            "Titta demo analyses" "$*" || true
+        notify-send --app-name="Titta demo" --icon="$icon" \
+            "Titta demo" "$*" || true
     fi
 }
 
@@ -90,11 +86,6 @@ new_target() {
 desktop=$(desktop_dir)
 
 if [ "$mode" = copy ]; then
-    # Autostart: leave an existing folder alone
-    if [ "$interactive" = 0 ] && [ -e "$desktop/$NAME" ]; then
-        exit 0
-    fi
-
     if [ ! -d "$SRC" ]; then
         message error "$SRC not found"
         exit 1
@@ -150,12 +141,17 @@ fi
 mkdir "$tmp/source"
 tar -xzf "$tmp/source.tar.gz" -C "$tmp/source"
 top=$(find "$tmp/source" -mindepth 1 -maxdepth 1 -type d | head -n 1)
-if [ -z "$top" ] || [ ! -d "$top/demo_analyses" ]; then
-    message error "No demo_analyses folder in $url"
-    exit 1
-fi
 
-cat > "$top/demo_analyses/VERSION" <<EOF
+mkdir "$tmp/titta_demo"
+for folder in "${FOLDERS[@]}"; do
+    if [ -z "$top" ] || [ ! -d "$top/$folder" ]; then
+        message error "No $folder folder in $url"
+        exit 1
+    fi
+    mv "$top/$folder" "$tmp/titta_demo/$folder"
+done
+
+cat > "$tmp/titta_demo/VERSION" <<EOF
 source:     https://github.com/$REPO
 branch:     $BRANCH
 commit:     ${sha:-unknown}
@@ -164,9 +160,13 @@ EOF
 
 mkdir -p "$desktop"
 # Folder name with the commit, or the date if the commit is unknown
-target=$(new_target "${NAME}_${BRANCH}_${sha:0:7}")
-[ -n "$sha" ] || target=$(new_target "${NAME}_${BRANCH}_$(date +%Y%m%d)")
-mv "$top/demo_analyses" "$target"
+if [ -n "$sha" ]; then
+    target=$(new_target "${NAME}_${BRANCH}_${sha:0:7}")
+else
+    target=$(new_target "${NAME}_${BRANCH}_$(date +%Y%m%d)")
+fi
+mv "$tmp/titta_demo" "$target"
+
 if [ -n "$sha" ]; then
     message info "Downloaded ${sha:0:7} to $target"
 else

@@ -1,5 +1,0 @@
-# The README files describe the folder they are in, and allfixations.txt is example data; they are part of the scripts that are copied to the Desktop.
-devjam-science-titta-demo-analyses: package-contains-documentation-outside-usr-share-doc [usr/share/titta-demo-analyses/*]
-
-# Man pages are not written yet; docs/man-pages.md lists which commands need one.
-devjam-science-titta-demo-analyses: no-manual-page *

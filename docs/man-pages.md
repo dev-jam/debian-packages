@@ -85,8 +85,8 @@ is the honest long-term answer for these.
 - **Backends of desktop entries and service menus**:
   `system-clean-apt` (apt-cleaner), `opensesame-psychopy-launch`,
   `sigmund-analyst-psychopy-launch`, `plasma-restart`, `apply-plasma-theme`,
-  `devjam-run-once` (XDG autostart entries), `titta-demo-analyses-setup`
-  (menu and autostart entry of devjam-science-titta-demo-analyses),
+  `devjam-run-once` (XDG autostart entries), `titta-demo-setup`
+  (menu entry of devjam-science-titta-demo),
   `check-flac`, `csv2tsv`, `evtx2xml`, `change-fourcc`,
   `convert-folder-to-video-iso`, `copy-quoted-paths`, `compare-diffoscope`,
   `extract-microvideo`, `mediainfo-gui-multi`, `check-dupes-fclones`,
