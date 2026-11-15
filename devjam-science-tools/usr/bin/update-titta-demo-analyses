@@ -1,0 +1,83 @@
+#!/bin/bash
+# update-titta-demo-analyses - refresh the payload of devjam-science-titta-demo-analyses
+#
+# Copyright (C) 2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Usage: update-titta-demo-analyses <package-folder> [ref]
+#
+#   <package-folder>  the package tree, e.g. ./devjam-science-titta-demo-analyses
+#   [ref]             branch, tag or commit of github.com/dev-jam/Titta
+#                     (default: staging)
+#
+# Replaces usr/share/titta-demo-analyses in the package tree with the
+# demo_analyses folder of that commit and writes the exact commit to VERSION.
+# The payload changes, so bump the upstream version in DEBIAN/control
+# (e.g. 1.0-1 -> 1.1-1) before building.
+
+set -euo pipefail
+
+REPO_URL=https://github.com/dev-jam/Titta.git
+
+usage() {
+    sed -n '2,16s/^# \{0,1\}//p' "$0"
+}
+
+case "${1:-}" in
+    -h|--help) usage; exit 0 ;;
+    -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+esac
+
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+    usage >&2
+    exit 2
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+    echo "git is not installed (apt install git)" >&2
+    exit 1
+fi
+
+pkg=$(realpath "$1")
+ref=${2:-staging}
+dest="$pkg/usr/share/titta-demo-analyses"
+
+if [ ! -f "$pkg/DEBIAN/control" ]; then
+    echo "Not a package folder (no DEBIAN/control): $pkg" >&2
+    exit 1
+fi
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+git clone --quiet --filter=blob:none --no-checkout "$REPO_URL" "$tmp/titta"
+# A branch only exists as origin/<branch>; a tag or commit as itself
+sha=$(git -C "$tmp/titta" rev-parse --verify --quiet "origin/$ref^{commit}" \
+      || git -C "$tmp/titta" rev-parse --verify --quiet "$ref^{commit}" \
+      || true)
+if [ -z "$sha" ]; then
+    echo "Unknown branch, tag or commit: $ref" >&2
+    exit 1
+fi
+git -C "$tmp/titta" checkout --quiet "$sha" -- demo_analyses
+date=$(git -C "$tmp/titta" log -1 --format=%cd --date=short "$sha")
+
+rm -rf "$dest"
+mkdir -p "$(dirname "$dest")"
+cp -r "$tmp/titta/demo_analyses" "$dest"
+
+cat > "$dest/VERSION" <<EOF
+source:     https://github.com/dev-jam/Titta
+branch:     $ref
+commit:     $sha
+date:       $date
+EOF
+
+# Files root:root, 644 for files and 755 for folders (no executable scripts)
+find "$dest" -type d -exec chmod 755 {} +
+find "$dest" -type f -exec chmod 644 {} +
+
+version=$(sed -n 's/^Version: //p' "$pkg/DEBIAN/control")
+echo "Payload updated to $ref = $sha ($date)"
+echo "Package version: $version. The payload changed, so bump the upstream part"
+echo "(e.g. 1.0-1 -> 1.1-1) and check with check-versions."

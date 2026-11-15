@@ -2,8 +2,8 @@
 
 Debian Policy (section 12.1) says that each program, utility and function
 should have an associated manual page. None of the commands in these
-packages has one yet, so lintian reports `no-manual-page` for 84 commands
-(85 with `s-benchmark-copy`).
+packages has one yet, so lintian reports `no-manual-page` for 85 commands
+(86 with `s-benchmark-copy`).
 The warning is overridden in each package (`usr/share/lintian/overrides/`)
 until man pages are written; this file records which commands actually need
 one.
@@ -55,6 +55,7 @@ print a usage text, so `help2man` is cheap here.
 | devjam-tools | `appimage2deb` | yes | Repackage an AppImage as a .deb |
 | devjam-tools | `update-local-debs` | yes | Update upstream GitHub .debs in a local apt repository |
 | devjam-tools | `update-artcraft-repo` | yes | Update the ArtCraft debs in a local apt repository |
+| devjam-science-tools | `update-titta-demo-analyses` | yes | Refresh the payload of devjam-science-titta-demo-analyses from git |
 | devjam-tools | `nspawn` | yes | systemd-nspawn wrapper for live-build and rescue |
 | devjam-tools | `audio-monitor` | yes | Monitor ALSA cards |
 | devjam-s-benchmark | `s-benchmark-copy` | yes | Copy the S benchmark suite to the disk under test |
