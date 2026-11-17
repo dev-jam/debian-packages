@@ -66,6 +66,27 @@ ALLOW_UNSTABLE=""
 # the backports archive above BUILD_SUITE. See the pin block below.
 FROM_BACKPORTS=""
 
+# Locally built .deb files (or directories of them) to make available
+# for build-dep resolution, via sbuild's own --extra-package: e.g. a
+# trove-classifiers backport you just built, needed by platformdirs.
+# sbuild serves them from a local archive inside the chroot, so they are
+# never installed on the host. Repeatable; a directory adds every .deb
+# in it (not recursively).
+EXTRA_PACKAGES=()
+
+# Store an --extra-package path as an absolute path (the scripts cd
+# around, and bpo-resume may run from elsewhere). A leading "~/" is
+# expanded here, because bash does not expand it after "--option=".
+add_extra_package() {
+    local path="$1"
+    [[ "$path" == "~/"* ]] && path="$HOME/${path#\~/}"
+    if [ ! -e "$path" ]; then
+        echo "Error: --extra-package: '$1' does not exist" >&2
+        exit 1
+    fi
+    EXTRA_PACKAGES+=("$(realpath "$path")")
+}
+
 # Check if required tools are installed (needed regardless of fetch method)
 command -v dch >/dev/null || { echo "Error: dch not installed" >&2; exit 1; }
 command -v sbuild >/dev/null || { echo "Error: sbuild not installed" >&2; exit 1; }
@@ -124,6 +145,10 @@ while [[ $# -gt 0 ]]; do
             FROM_BACKPORTS="${1#*=}"
             shift
             ;;
+        --extra-package=*)
+            add_extra_package "${1#*=}"
+            shift
+            ;;
         --)
             shift
             packages+=("$@")
@@ -131,7 +156,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -*)
             echo "Error: Unknown option $1" >&2
-            echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] <package1> [<package2> ...]" >&2
+            echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] [--extra-package=PATH]... <package1> [<package2> ...]" >&2
             exit 1
             ;;
         *)
@@ -142,7 +167,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Check if at least one package argument is provided
-[ "${#packages[@]}" -eq 0 ] && { echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] <package1> [<package2> ...]" >&2; exit 1; }
+[ "${#packages[@]}" -eq 0 ] && { echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] [--extra-package=PATH]... <package1> [<package2> ...]" >&2; exit 1; }
 
 # Tool check specific to the chosen fetch method
 case "$FETCH_METHOD" in
@@ -163,6 +188,7 @@ echo "Fetch method: $FETCH_METHOD"
 [ "$PAUSE" -eq 1 ] && echo "Pause before build: on"
 [ -n "$ALLOW_UNSTABLE" ] && echo "From unstable (only): $ALLOW_UNSTABLE"
 [ -n "$FROM_BACKPORTS" ] && echo "From ${BUILD_SUITE}-backports (pinned): $FROM_BACKPORTS"
+for extra in "${EXTRA_PACKAGES[@]}"; do echo "Extra package(s): $extra"; done
 echo "Creating deb packages for: ${packages[*]}"
 
 success_count=0
@@ -352,6 +378,10 @@ for package in "${packages[@]}"; do
         sbuild_args+=(--chroot-setup-commands="sh -c \"echo ${bpo_pin_content_b64} | base64 -d > ${bpo_pin_file} && echo 'Wrote backports apt pin preferences:' && echo && cat ${bpo_pin_file} && echo\"")
     fi
 
+    for extra in "${EXTRA_PACKAGES[@]}"; do
+        sbuild_args+=(--extra-package="$extra")
+    done
+
     # Remember --allow-unstable one directory *above* the source tree
     # (not inside it, so it never ends up in the actual .dsc/.diff.gz) --
     # this is what lets "bpo-resume" pick the same pin back up later
@@ -367,6 +397,12 @@ for package in "${packages[@]}"; do
         echo "$FROM_BACKPORTS" > ../.bpo-from-backports
     else
         rm -f ../.bpo-from-backports
+    fi
+    # Same for --extra-package (one absolute path per line)
+    if [ "${#EXTRA_PACKAGES[@]}" -gt 0 ]; then
+        printf '%s\n' "${EXTRA_PACKAGES[@]}" > ../.bpo-extra-packages
+    else
+        rm -f ../.bpo-extra-packages
     fi
 
     if sbuild "${sbuild_args[@]}" .; then
