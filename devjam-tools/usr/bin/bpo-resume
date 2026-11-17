@@ -127,6 +127,18 @@ src_dir=$(find_source_dir) || {
 home_dir=$(dirname "$(dirname "$src_dir")")
 nproc_count=$(nproc)
 
+# --profiles=nocheck (below) drops <!nocheck> build-deps, but the Build
+# Profile spec wants the nocheck profile paired with
+# DEB_BUILD_OPTIONS=nocheck, which is what makes dh_auto_test skip the
+# tests. Without it, newer debhelper adds it itself and warns:
+# "Copying nocheck into DEB_BUILD_OPTIONS: It was in DEB_BUILD_PROFILES
+# but not in DEB_BUILD_OPTIONS". sbuild passes DEB_BUILD_OPTIONS on to
+# the build (its default environment_filter allows it).
+case " ${DEB_BUILD_OPTIONS:-} " in
+    *" nocheck "*) ;;
+    *) export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+$DEB_BUILD_OPTIONS }nocheck" ;;
+esac
+
 # Pick up the --allow-unstable value bpo-build remembered, one directory
 # above the source tree, unless this invocation explicitly overrides it
 # (including explicitly clearing it with --allow-unstable=).
