@@ -175,12 +175,17 @@ for package in "${packages[@]}"; do
             continue
         fi
 
-        # Navigate into extracted directory (nullglob so an unmatched pattern
-        # expands to nothing instead of the literal string, and so we can detect
-        # "no match" vs "more than one match" explicitly rather than letting cd
-        # fail on multiple arguments)
+        # Navigate into the extracted directory. Don't derive its name from
+        # "$package": apt source maps a binary package name to its source
+        # package (e.g. python3-platformdirs -> platformdirs), so the
+        # extracted directory is named after the *source* package. Since
+        # every package gets its own fresh directory, the extracted tree is
+        # simply the only subdirectory here. (nullglob so an unmatched
+        # pattern expands to nothing instead of the literal string, and so
+        # we can detect "no match" vs "more than one match" explicitly
+        # rather than letting cd fail on multiple arguments.)
         shopt -s nullglob
-        extracted_dirs=("${package}"-*)
+        extracted_dirs=(*/)
         shopt -u nullglob
 
         if [ "${#extracted_dirs[@]}" -ne 1 ] || ! cd "${extracted_dirs[0]}"; then
@@ -188,6 +193,11 @@ for package in "${packages[@]}"; do
             error_count=$((error_count + 1))
             cd "$home_dir"
             continue
+        fi
+
+        source_name=$(dpkg-parsechangelog -S Source)
+        if [ "$source_name" != "$package" ]; then
+            echo "ℹ️  '$package' resolved to source package '$source_name' (dir: $PWD)"
         fi
     fi
 
