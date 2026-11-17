@@ -231,6 +231,9 @@ if [ -n "$FROM_BACKPORTS" ]; then
     # libdebhelper-perl). Same base64 transport as --allow-unstable; no
     # apt-get update is needed here, sbuild runs its own after adding
     # the backports repository.
+    # Match by codename (n=), not suite (a=): the backports Release
+    # file says "Suite: stable-backports" but "Codename:
+    # trixie-backports", so a=trixie-backports matches nothing.
     bpo_pin_file="/etc/apt/preferences.d/99-backports-allowlist"
     bpo_src_pkglist=""
     for pkg in ${FROM_BACKPORTS//,/ }; do
@@ -238,7 +241,7 @@ if [ -n "$FROM_BACKPORTS" ]; then
     done
     bpo_src_pkglist="${bpo_src_pkglist% }"
     bpo_pin_content=$(printf '%s\n' \
-        "Package: ${bpo_src_pkglist}" "Pin: release a=${BUILD_SUITE}-backports" "Pin-Priority: 990")
+        "Package: ${bpo_src_pkglist}" "Pin: release n=${BUILD_SUITE}-backports" "Pin-Priority: 990")
     bpo_pin_content_b64=$(printf '%s' "$bpo_pin_content" | base64 -w0)
     sbuild_args+=(--chroot-setup-commands="sh -c \"echo ${bpo_pin_content_b64} | base64 -d > ${bpo_pin_file} && echo 'Wrote backports apt pin preferences:' && echo && cat ${bpo_pin_file} && echo\"")
 fi
