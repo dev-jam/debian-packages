@@ -3,6 +3,7 @@ set -e
 
 dpkg-maintscript-helper rm_conffile /etc/kernel/postinst.d/99-grub-experiment-mode 1.1-1~ -- "$@"
 dpkg-maintscript-helper rm_conffile /etc/kernel/postrm.d/99-grub-experiment-mode 1.1-1~ -- "$@"
+dpkg-maintscript-helper mv_conffile /etc/default/grub.d/11_experiment_mode_defaults.cfg /etc/default/grub.d/experiment_mode_defaults.cfg 1.7-1~ -- "$@"
 
 case "$1" in
     configure)

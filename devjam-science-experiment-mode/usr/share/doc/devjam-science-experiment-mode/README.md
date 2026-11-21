@@ -54,7 +54,7 @@ the packages ship them, and the commands below change them for you.
    choose your own presets in step 3. CPU 0 cannot be isolated.
 
 3. **Switch the entries on.** Edit
-   `/etc/default/grub.d/11_experiment_mode_defaults.cfg`:
+   `/etc/default/grub.d/experiment_mode_defaults.cfg`:
 
    ```sh
    ENABLE_EXPERIMENT_MODE="true"
@@ -151,7 +151,7 @@ manage-opensesame-affinity --show         # CPU setting of OpenSesame (RT)
 
 | What | How |
 | --- | --- |
-| Other CPU presets | `EXPERIMENT_MODE_CPU_PRESETS` in `/etc/default/grub.d/11_experiment_mode_defaults.cfg`, then `sudo update-grub` |
+| Other CPU presets | `EXPERIMENT_MODE_CPU_PRESETS` in `/etc/default/grub.d/experiment_mode_defaults.cfg`, then `sudo update-grub` |
 | Preset at the top level | `DEFAULT_NR_ISO_CPU` (number of CPUs of a preset, 0 for the preset without isolated CPUs), then `sudo update-grub` |
 | Extra kernel parameters in experiment mode | `GRUB_EXPERIMENT_MODE_DEFAULT`, then `sudo update-grub` |
 | Kernel of the top level entry | Newest Liquorix kernel, else newest kernel; `GRUB_TOP_LEVEL=/boot/vmlinuz-...` in `/etc/default/grub` chooses another one (GRUB 2.12 or later) |
@@ -383,7 +383,7 @@ system one. Such fixed CPUs apply in normal mode too.
 
 | File | Purpose |
 | --- | --- |
-| `/etc/default/grub.d/11_experiment_mode_defaults.cfg` | Settings of the GRUB entries |
+| `/etc/default/grub.d/experiment_mode_defaults.cfg` | Settings of the GRUB entries |
 | `/etc/grub.d/11_experiment_mode`, `/usr/lib/devjam/experiment-mode/grub-entries` | Make the GRUB entries during `update-grub` |
 | `/usr/lib/systemd/system/auto-pin-audio.service`, `/usr/lib/udev/rules.d/99-auto-pin-audio.rules` | Pin sound card IRQs in experiment mode |
 | `/usr/lib/systemd/system/irqbalance.service.d/disable-experiment.conf` | No irqbalance in experiment mode |

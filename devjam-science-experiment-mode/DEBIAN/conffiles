@@ -1,2 +1,2 @@
-/etc/default/grub.d/11_experiment_mode_defaults.cfg
+/etc/default/grub.d/experiment_mode_defaults.cfg
 /etc/grub.d/11_experiment_mode

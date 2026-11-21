@@ -24,7 +24,7 @@
 #   irqaffinity=0-1,8-15             other IRQs start on the other CPUs
 #   experiment_mode=1                switch for the systemd units
 #
-# Settings, in /etc/default/grub.d/11_experiment_mode_defaults.cfg:
+# Settings, in /etc/default/grub.d/experiment_mode_defaults.cfg:
 #   ENABLE_EXPERIMENT_MODE        "true" adds the entries
 #   EXPERIMENT_MODE_CPU_PRESETS   CPU lists separated by spaces, one per
 #                                 preset (default "2,3 2-5 2-7"); a preset
