@@ -1,0 +1,60 @@
+#!/bin/sh
+# Copyright (C) 2022-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Searches one chosen filesystem for iso files in the directory "/boot-isos".
+# Settings, in /etc/default/grub.d/bootisos.cfg:
+#   GRUB_BOOTISOS_UUID   UUID of the filesystem holding /boot-isos
+#                        (see "lsblk -f"); no entry is added when it is empty
+set -e
+
+# grub-mkconfig sources the same files, but only exports its own GRUB_*
+# variables to the scripts in /etc/grub.d.
+GRUB_BOOTISOS_UUID=""
+for f in /etc/default/grub /etc/default/grub.d/*.cfg; do
+	if [ -f "$f" ]; then . "$f"; fi
+done
+
+if [ -z "$GRUB_BOOTISOS_UUID" ]; then
+	exit 0
+fi
+
+# Only characters that occur in filesystem UUIDs, so that nothing else ends
+# up in grub.cfg.
+case "$GRUB_BOOTISOS_UUID" in
+	*[!0-9A-Za-z-]*)
+		echo 1>&2 "GRUB_BOOTISOS_UUID '$GRUB_BOOTISOS_UUID' is not a valid UUID, no entry added for ISO's (personal)"
+		exit 0
+		;;
+esac
+
+echo 1>&2 "Adding boot menu entry for finding and booting ISO's (personal)"
+
+cat <<GRUBEOF
+submenu "Find and boot ISO's (personal)" {
+
+	insmod regexp
+	insmod loopback
+	insmod part_gpt
+	insmod part_msdos
+
+	search --no-floppy --fs-uuid --set=root $GRUB_BOOTISOS_UUID
+
+	for iso in /boot-isos/*.iso; do
+
+		# Prevent message when directory is empty
+		if [ -f "\$iso" ]; then
+			regexp --set=iso_file '^/boot-isos/(.*\$)' "\$iso"
+			menuentry "Boot: \$iso_file" \$iso {
+				iso_path=\$2
+				export iso_path
+				search --no-floppy --fs-uuid --set=root $GRUB_BOOTISOS_UUID
+				loopback loop \$iso_path
+				root=(loop)
+				configfile /boot/grub/loopback.cfg
+				loopback --delete loop
+			}
+		fi
+	done
+}
+GRUBEOF
