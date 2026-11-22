@@ -120,19 +120,23 @@ opensesame-plugin-experiment-manager,
 opensesame-plugin-parallel-port-trigger,
 opensesame-plugin-radboudbox,
 opensesame-plugin-screenshot,
-opensesame-plugin-titta-eyetracking
+opensesame-plugin-titta-eyetracking,
+psychopy-radboudbox,
+psychopy-titta-eyetracking
 "
 
 # dev-jam plugins: git repositories (dev environment)
-# Note: repo names use underscores; no branch is pinned, so HEAD of each repo's
-# default branch is installed.
+# Note: the OpenSesame repo names use underscores (the PsychoPy ones dashes); no
+# branch is pinned, so HEAD of each repo's default branch is installed.
 PKGS_PLUGINS_GIT="
 git+${DEV_GIT_BASE}/opensesame-plugin-audio_low_latency.git,
 git+${DEV_GIT_BASE}/opensesame-plugin-experiment_manager.git,
 git+${DEV_GIT_BASE}/opensesame-plugin-parallel_port_trigger.git,
 git+${DEV_GIT_BASE}/opensesame-plugin-radboudbox.git,
 git+${DEV_GIT_BASE}/opensesame-plugin-screenshot.git,
-git+${DEV_GIT_BASE}/opensesame-plugin-titta_eyetracking.git
+git+${DEV_GIT_BASE}/opensesame-plugin-titta_eyetracking.git,
+git+${DEV_GIT_BASE}/psychopy-radboudbox.git,
+git+${DEV_GIT_BASE}/psychopy-titta-eyetracking.git
 "
 
 # Join package lists into a single string without spaces or newlines for installer arguments
