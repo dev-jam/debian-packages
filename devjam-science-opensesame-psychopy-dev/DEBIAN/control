@@ -1,9 +1,9 @@
 Package: devjam-science-opensesame-psychopy-dev
-Version: 1.0-1
+Version: 1.0-2
 Section: science
 Priority: optional
 Architecture: all
-Depends: devjam-science-tools (>= 2.5-1)
+Depends: devjam-science-tools (>= 2.6-1)
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: OpenSesame Launcher with the PsychoPy dev environment
  Desktop launchers for OpenSesame and Sigmund Analyst in the PsychoPy
