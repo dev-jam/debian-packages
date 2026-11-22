@@ -67,6 +67,13 @@ restore_control() {
     if [ -n "$control_backup" ] && [ -f "$control_backup" ]; then
         cat "$control_backup" > "$control_path"
         rm -f "$control_backup"
+        # The content is the original again, but the file's ctime and mtime
+        # changed, so git sees it as modified until its index is refreshed,
+        # and then refuses e.g. "git reset --keep" ("not uptodate").
+        # Refresh only the stat data; this changes nothing in the tree.
+        if git -C "$(dirname "$control_path")" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            git -C "$(dirname "$control_path")" update-index -q --refresh >/dev/null 2>&1 || true
+        fi
     fi
     control_backup=""
     if [ -n "$md5sums_generated" ]; then
