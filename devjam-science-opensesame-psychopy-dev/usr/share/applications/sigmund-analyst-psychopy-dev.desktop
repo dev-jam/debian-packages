@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Sigmund Analyst with PsychoPy (dev)
+GenericName=Code Editor
+Comment=AI-enhanced code editor for data analysis, in the PsychoPy dev environment
+Exec=sigmund-analyst-psychopy-dev-launch
+TryExec=/opt/psychopy/PsychoPy-dev/.venv/bin/sigmund-analyst
+Icon=/usr/share/icons/sigmund-analyst.png
+Terminal=false
+Categories=Development;IDE;
+Keywords=sigmund;opensesame;psychopy;python;ai;analysis;statistics;editor;dev;
+StartupNotify=true

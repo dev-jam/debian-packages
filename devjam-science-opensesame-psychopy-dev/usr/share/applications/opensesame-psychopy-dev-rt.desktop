@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=OpenSesame 4.1 with PsychoPy (dev, RT Priority)
+GenericName=Experiment Builder
+Comment=OpenSesame in the PsychoPy dev environment, started with real-time priority, for testing
+Exec=systemctl --user start opensesame-psychopy-dev-rt
+TryExec=/opt/psychopy/PsychoPy-dev/.venv/bin/opensesame
+Icon=opensesame
+Terminal=false
+Categories=Development;IDE;Science;Education;
+Keywords=opensesame;psychopy;experiment;psychology;stimulus;timing;realtime;rt;lab;dev;
+StartupNotify=false

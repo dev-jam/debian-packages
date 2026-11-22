@@ -2,8 +2,8 @@
 
 Debian Policy (section 12.1) says that each program, utility and function
 should have an associated manual page. None of the commands in these
-packages has one yet, so lintian reports `no-manual-page` for 85 commands
-(86 with `s-benchmark-copy`).
+packages has one yet, so lintian reports `no-manual-page` for 88 commands
+(89 with `s-benchmark-copy`).
 The warning is overridden in each package (`usr/share/lintian/overrides/`)
 until man pages are written; this file records which commands actually need
 one.
@@ -30,6 +30,7 @@ that change system behaviour. These need a man page most.
 | devjam-science-experiment-mode | `usb-affinity` | yes | USB tree with controller IRQs and CPU affinity |
 | devjam-science-opensesame-psychopy | `manage-opensesame-affinity` | yes | Set the CPU affinity of OpenSesame |
 | devjam-science-opensesame-psychopy | `opensesamerun-psychopy` | yes | Run an OpenSesame experiment without the GUI |
+| devjam-science-opensesame-psychopy-dev | `opensesamerun-psychopy-dev` | yes | Run an OpenSesame experiment without the GUI (dev environment) |
 | devjam-science-tools | `install-psychopy-opensesame` | yes | Install PsychoPy with OpenSesame |
 | devjam-science-tools | `print-system-information` | no | Hardware and software report |
 | devjam-science-tools | `make-osexp` | yes | Pack a folder as an OpenSesame experiment |
@@ -84,7 +85,8 @@ is the honest long-term answer for these.
   (brave-flags-wrapper), `thunar` (devjam-thunar-actions).
 - **Backends of desktop entries and service menus**:
   `system-clean-apt` (apt-cleaner), `opensesame-psychopy-launch`,
-  `sigmund-analyst-psychopy-launch`, `plasma-restart`, `apply-plasma-theme`,
+  `sigmund-analyst-psychopy-launch`, `opensesame-psychopy-dev-launch`,
+  `sigmund-analyst-psychopy-dev-launch`, `plasma-restart`, `apply-plasma-theme`,
   `devjam-run-once` (XDG autostart entries), `titta-demo-setup`
   (menu entry of devjam-science-titta-demo),
   `check-flac`, `csv2tsv`, `evtx2xml`, `change-fourcc`,

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=OpenSesame 4.1 with PsychoPy (dev)
+GenericName=Experiment Builder
+Comment=OpenSesame in the PsychoPy dev environment, for testing
+Exec=opensesame-psychopy-dev-launch %f
+TryExec=/opt/psychopy/PsychoPy-dev/.venv/bin/opensesame
+Icon=opensesame
+Terminal=false
+Categories=Development;IDE;Science;Education;
+Keywords=opensesame;psychopy;experiment;psychology;stimulus;timing;lab;dev;
+StartupNotify=true

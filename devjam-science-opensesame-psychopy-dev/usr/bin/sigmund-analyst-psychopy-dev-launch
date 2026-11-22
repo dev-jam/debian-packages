@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Wrapper that activates the PsychoPy dev venv, then starts Sigmund-Analyst.
+# Dev counterpart of sigmund-analyst-psychopy-launch.
+VENV_DIR="/opt/psychopy/PsychoPy-dev/.venv"
+
+if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
+    echo "Error: PsychoPy dev venv not found in $VENV_DIR" >&2
+    echo "       Install it with install-psychopy-opensesame --dev." >&2
+    exit 1
+fi
+source "$VENV_DIR/bin/activate"
+exec sigmund-analyst "$@"

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Wrapper that activates the PsychoPy dev venv, then starts OpenSesame.
+# Dev counterpart of opensesame-psychopy-launch (devjam-science-opensesame-psychopy).
+#
+# With OPENSESAME_CPUS=isolated (set by opensesame-psychopy-dev-rt.service),
+# OpenSesame runs on the CPUs isolated with isolcpus= in experiment mode, so
+# it follows the CPU preset chosen in the GRUB menu. A CPUAffinity= of the
+# service wins; manage-opensesame-affinity only handles the standard
+# service, so set it here with "systemctl --user edit
+# opensesame-psychopy-dev-rt". The inherited affinity says nothing: the
+# user service manager can have every CPU in it.
+VENV_DIR="/opt/psychopy/PsychoPy-dev/.venv"
+SERVICE="opensesame-psychopy-dev-rt.service"
+
+if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
+    echo "Error: PsychoPy dev venv not found in $VENV_DIR" >&2
+    echo "       Install it with install-psychopy-opensesame --dev." >&2
+    exit 1
+fi
+source "$VENV_DIR/bin/activate"
+
+# The inline_script editor (pyqt_code_editor) lints with Ruff, which writes a
+# .ruff_cache directory next to the experiment. The cache gives no speed gain
+# for scripts this small, so it is off. Set RUFF_NO_CACHE=false to keep it.
+export RUFF_NO_CACHE="${RUFF_NO_CACHE:-true}"
+
+if [[ ${OPENSESAME_CPUS:-} == isolated ]]; then
+    isolated=$(cat /sys/devices/system/cpu/isolated 2>/dev/null)
+    fixed=$(systemctl --user show -p CPUAffinity --value "$SERVICE" 2>/dev/null)
+    if [[ -n $isolated && -z $fixed ]]; then
+        exec taskset -c "$isolated" opensesame "$@"
+    fi
+fi
+
+exec opensesame "$@"
