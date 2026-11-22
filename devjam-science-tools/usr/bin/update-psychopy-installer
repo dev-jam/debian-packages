@@ -1,7 +1,27 @@
-#!/bin/sh                                                                                                   
+#!/bin/sh
+# Download the latest psychopy_linux_installer to /usr/local/bin.
+
 # Copyright (C) 2022-2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-sudo curl --output-dir /usr/local/bin -LOs https://github.com/wieluk/psychopy_linux_installer/releases/latest/download/psychopy_linux_installer
-sudo chmod +x /usr/local/bin/psychopy_linux_installer
+set -e
 
+INSTALLER_URL="https://github.com/wieluk/psychopy_linux_installer/releases/latest/download/psychopy_linux_installer"
+
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
+# Download to a temporary file first, so a failed or partial download never
+# replaces a working installer
+INSTALLER_TMP=$(mktemp)
+trap 'rm -f "$INSTALLER_TMP"' EXIT
+curl --fail --retry 3 -Ls -o "$INSTALLER_TMP" "$INSTALLER_URL"
+if ! head -n 1 "$INSTALLER_TMP" | grep -q '^#!'; then
+    echo "Downloaded file is not a script: $INSTALLER_URL" >&2
+    exit 1
+fi
+$SUDO install -m 0755 "$INSTALLER_TMP" /usr/local/bin/psychopy_linux_installer
+echo "psychopy_linux_installer $(sed -n 's/^SCRIPT_VERSION="\(.*\)"/\1/p' /usr/local/bin/psychopy_linux_installer) installed."

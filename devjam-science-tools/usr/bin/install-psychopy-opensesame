@@ -2,8 +2,9 @@
 
 # Usage:
 #   install-psychopy-opensesame          Install standard PsychoPy (with OpenSesame) + PsychoPy Studio
-#   install-psychopy-opensesame --dev    Install ONLY the dev environment in /opt/psychopy/PsychoPy-dev,
-#                                        with the dev-jam plugins taken from git (default branch HEAD)
+#   install-psychopy-opensesame --dev    Install ONLY the dev environment in /opt/psychopy/PsychoPy-dev:
+#                                        Python 3.13, PsychoPy from its git dev branch and
+#                                        the dev-jam plugins from git (default branch HEAD)
 #   install-psychopy-opensesame --help   Show this help
 
 # Copyright (C) 2022-2026 Bob Rosbag <mail@bobrosbag.nl>
@@ -12,8 +13,19 @@
 set -e
 
 INSTALL_DIR="/opt/psychopy"
+STD_VENV_NAME="PsychoPy"
 DEV_VENV_NAME="PsychoPy-dev"
+VERIFY_SCRIPT="/usr/lib/devjam-science-tools/verify-venv-packages.py"
+INSTALLER_URL="https://github.com/wieluk/psychopy_linux_installer/releases/latest/download/psychopy_linux_installer"
 DEV_GIT_BASE="https://github.com/dev-jam"
+# Dev environment: PsychoPy from the dev branch of github.com/psychopy/psychopy
+# (pyglet 2, Python 3.11-3.14; no release yet on 2026-11-22). Python 3.13 also
+# allows opensesame-extension-sigmund >= 1.5.0 (sigmund-mcp-relay needs >= 3.13).
+# psychopy_linux_installer officially supports Python 3.8-3.10; for a newer
+# Python it only logs a warning. "git" installs the dev branch HEAD and no
+# separate psychopy-app (the dev branch still contains psychopy/app).
+DEV_PYTHON_VERSION="3.13"
+DEV_PSYCHOPY_VERSION="git"
 
 # Already root (e.g. a live-build chroot hook): no sudo needed or installed
 if [ "$(id -u)" -eq 0 ]; then
@@ -32,7 +44,7 @@ for arg in "$@"; do
     case "$arg" in
         --dev) MODE="dev" ;;
         -h|--help)
-            sed -n '3,7p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '3,8p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -47,6 +59,24 @@ done
 # Python download caches, the uv tools and the build packages the installer
 # added itself. The venvs and their Python stay. Keeps caches out of a
 # live image when this runs from a live-build hook.
+
+# Relation to the official OpenSesame Linux installer (linux-installer.sh,
+# branch nightingale): the same OpenSesame packages, PyGaze 0.8.8 and the
+# expyriment 0.10.0+opensesame2 wheel are installed. Deliberate differences:
+# - psychopy_linux_installer uses Python 3.10 (it supports 3.8-3.10 only), so
+#   psychopy needs no --ignore-requires-python (psychopy requires <3.13).
+# - expyriment is installed with its dependencies, so it brings pygame. The
+#   official installer uses --no-deps plus pygame-ce, only because pygame has
+#   no Python 3.14 wheels. pygame-ce must NOT be added here: it ships the same
+#   "pygame" module and would overwrite pygame.
+# - No --pre: on 2026-11-22 none of the OpenSesame packages had a newer
+#   pre-release than the stable release.
+# - All extra packages go into one uv resolver run (before psychopy itself),
+#   not into separate pip steps as in the official script.
+# Known limit of Python 3.10: opensesame-extension-sigmund >= 1.5.0 needs
+# pyqt_code_editor >= 1.3, which needs sigmund-mcp-relay (Python >= 3.13).
+# The resolver therefore stays at sigmund 1.4.2 and pyqt_code_editor 1.2.0,
+# and the OpenSesame updater keeps offering an update that cannot install.
 
 # Packages shared by the standard and the dev environment
 PKGS_COMMON="
@@ -129,6 +159,19 @@ print_pkgs() {
     echo "     --------------------------------------------------------------------------"
 }
 
+# Check that every requested package ended up in the venv. psychopy_linux_installer
+# falls back to installing one package at a time when the batch fails, and then
+# only logs "WARNING: Failed to install '...'. Skipping." and still exits 0.
+# Arguments: venv name, comma-separated package list
+verify_pkgs() {
+    venv_python="${INSTALL_DIR}/$1/.venv/bin/python"
+    if [ ! -x "$venv_python" ]; then
+        echo "ERROR: $venv_python not found." >&2
+        return 1
+    fi
+    "$venv_python" -I "$VERIFY_SCRIPT" "$2"
+}
+
 # --- INSTALLATION SUMMARY ---
 print_banner "INSTALLATION SUMMARY"
 
@@ -136,7 +179,7 @@ echo "The following components will be installed:"
 echo ""
 if [ "$MODE" = "dev" ]; then
     TOTAL_STEPS=2
-    echo "1. PsychoPy DEV (version: latest)"
+    echo "1. PsychoPy DEV (version: ${DEV_PSYCHOPY_VERSION}, dev branch; Python ${DEV_PYTHON_VERSION})"
     echo "   - Location: ${INSTALL_DIR}/${DEV_VENV_NAME}"
     echo "   - dev-jam plugins from git (default branch):"
     print_pkgs "$PKGS_PLUGINS_GIT"
@@ -160,18 +203,24 @@ echo ""
 # --- STEP 1: DOWNLOAD / UPDATE INSTALLER ---
 print_banner "[1/${TOTAL_STEPS}] Updating / Installing PsychoPy Linux Installer..."
 echo "Downloading latest version of psychopy_linux_installer to /usr/local/bin..."
-$SUDO curl --fail --retry 3 --output-dir /usr/local/bin -LO https://github.com/wieluk/psychopy_linux_installer/releases/latest/download/psychopy_linux_installer
-
-echo "Setting executable permissions (+x)..."
-$SUDO chmod +x /usr/local/bin/psychopy_linux_installer
-
-echo "psychopy_linux_installer update complete."
+# Download to a temporary file first, so a failed or partial download never
+# replaces a working installer
+INSTALLER_TMP=$(mktemp)
+trap 'rm -f "$INSTALLER_TMP"' EXIT
+curl --fail --retry 3 -L -o "$INSTALLER_TMP" "$INSTALLER_URL"
+if ! head -n 1 "$INSTALLER_TMP" | grep -q '^#!'; then
+    echo "Downloaded file is not a script: $INSTALLER_URL" >&2
+    exit 1
+fi
+$SUDO install -m 0755 "$INSTALLER_TMP" /usr/local/bin/psychopy_linux_installer
+echo "psychopy_linux_installer $(sed -n 's/^SCRIPT_VERSION="\(.*\)"/\1/p' /usr/local/bin/psychopy_linux_installer) installed."
 
 if [ "$MODE" = "dev" ]; then
     # --- STEP 2 (DEV): INSTALL PSYCHOPY DEV ---
     print_banner "[2/${TOTAL_STEPS}] Installing PsychoPy DEV (dev-jam plugins from git)..."
     $SUDO /usr/local/bin/psychopy_linux_installer \
-      --psychopy-version=latest \
+      --psychopy-version="$DEV_PSYCHOPY_VERSION" \
+      --python-version="$DEV_PYTHON_VERSION" \
       --target-users="$TARGET_USER" \
       --desktop-shortcuts=none \
       --install-dir="$INSTALL_DIR" \
@@ -182,6 +231,10 @@ if [ "$MODE" = "dev" ]; then
       --non-interactive \
       --cleanup \
       --additional-packages="$PKGS_DEV_STRING"
+
+    echo ""
+    echo "Checking the installed packages..."
+    verify_pkgs "$DEV_VENV_NAME" "$PKGS_DEV_STRING"
 else
     # --- STEP 2: INSTALL STANDARD PSYCHOPY ---
     print_banner "[2/${TOTAL_STEPS}] Installing Standard PsychoPy (with additional packages)..."
@@ -190,13 +243,17 @@ else
       --target-users="$TARGET_USER" \
       --desktop-shortcuts=none \
       --install-dir="$INSTALL_DIR" \
-      --venv-name=PsychoPy \
+      --venv-name="$STD_VENV_NAME" \
       --force-overwrite \
       --sudo-mode=auto \
       --log-level=info \
       --non-interactive \
       --cleanup \
       --additional-packages="$PKGS_STD_STRING"
+
+    echo ""
+    echo "Checking the installed packages..."
+    verify_pkgs "$STD_VENV_NAME" "$PKGS_STD_STRING"
 
     # --- STEP 3: INSTALL PSYCHOPY STUDIO ---
     print_banner "[3/${TOTAL_STEPS}] Installing PsychoPy Studio (without additional packages)..."
