@@ -23,7 +23,7 @@ DEV_GIT_BASE="https://github.com/dev-jam"
 # allows opensesame-extension-sigmund >= 1.5.0 (sigmund-mcp-relay needs >= 3.13).
 # psychopy_linux_installer officially supports Python 3.8-3.10; for a newer
 # Python it only logs a warning. "git" installs the dev branch HEAD and no
-# separate psychopy-app (the dev branch still contains psychopy/app).
+# psychopy-app (see the accepted GUI error below).
 DEV_PYTHON_VERSION="3.13"
 DEV_PSYCHOPY_VERSION="git"
 
@@ -218,6 +218,7 @@ echo "psychopy_linux_installer $(sed -n 's/^SCRIPT_VERSION="\(.*\)"/\1/p' /usr/l
 if [ "$MODE" = "dev" ]; then
     # --- STEP 2 (DEV): INSTALL PSYCHOPY DEV ---
     print_banner "[2/${TOTAL_STEPS}] Installing PsychoPy DEV (dev-jam plugins from git)..."
+    installer_rc=0
     $SUDO /usr/local/bin/psychopy_linux_installer \
       --psychopy-version="$DEV_PSYCHOPY_VERSION" \
       --python-version="$DEV_PYTHON_VERSION" \
@@ -230,7 +231,35 @@ if [ "$MODE" = "dev" ]; then
       --log-level=info \
       --non-interactive \
       --cleanup \
-      --additional-packages="$PKGS_DEV_STRING"
+      --additional-packages="$PKGS_DEV_STRING" || installer_rc=$?
+
+    # With --psychopy-version=git, psychopy_linux_installer 3.1.0 checks the
+    # GUI with "import psychopy.app.psychopyApp". On the PsychoPy dev branch
+    # psychopy/app only re-exports psychopy_app, which the installer does not
+    # install in git mode, so that check always fails, as the very last step.
+    # OpenSesame only needs the psychopy library, so that one error is
+    # accepted; any other error still stops the script. The PsychoPy GUI
+    # (PsychoPy-dev, start_psychopy) does not work in this environment.
+    if [ "$installer_rc" -ne 0 ]; then
+        # shellcheck disable=SC2016 # $1 is expanded by the inner sh
+        installer_log=$($SUDO sh -c 'ls -t "$1"/psychopy_linux_installer_*.log 2>/dev/null | head -n 1' sh "${INSTALL_DIR}/${DEV_VENV_NAME}")
+        last_error=""
+        if [ -n "$installer_log" ]; then
+            last_error=$($SUDO grep ' - ERROR: ' "$installer_log" | tail -n 1)
+        fi
+        case "$last_error" in
+            *"ERROR: PsychoPy is installed but its GUI cannot be loaded:"*)
+                echo ""
+                echo "WARNING: psychopy_linux_installer could not load the PsychoPy GUI"
+                echo "         (no psychopy_app in git mode). OpenSesame does not need it;"
+                echo "         the PsychoPy GUI of this environment does not start."
+                ;;
+            *)
+                echo "ERROR: psychopy_linux_installer failed (exit code $installer_rc)." >&2
+                exit "$installer_rc"
+                ;;
+        esac
+    fi
 
     echo ""
     echo "Checking the installed packages..."
