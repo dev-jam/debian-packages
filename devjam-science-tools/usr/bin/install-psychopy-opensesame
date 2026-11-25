@@ -5,7 +5,22 @@
 #   install-psychopy-opensesame --dev    Install ONLY the dev environment in /opt/psychopy/PsychoPy-dev:
 #                                        Python 3.13, PsychoPy from its git dev branch and
 #                                        the dev-jam plugins from git (default branch HEAD)
+#   install-psychopy-opensesame --override=SPEC
+#                                        Replace the package of the same name in the package
+#                                        list, or add it; can be given more than once and
+#                                        combined with --dev (PsychoPy Studio is not affected)
 #   install-psychopy-opensesame --help   Show this help
+#
+# SPEC is a pip requirement whose package name can be read from it:
+#   name, name==1.2.3, name>=1.2      plain requirement
+#   https://.../name-1.2-py3-none-any.whl
+#                                     wheel: the name comes from the file name
+#   name@https://.../archive.tar.gz   PEP 508 direct reference: any other URL,
+#   name@git+https://...git@branch    including git, needs the name before the @
+#
+# Overrides can also be listed, one per line (# starts a comment line), in
+#   /etc/devjam-science-tools/install-psychopy-opensesame.overrides
+# Overrides on the command line come after the file, so they win.
 
 # Copyright (C) 2022-2026 Bob Rosbag <mail@bobrosbag.nl>
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,6 +31,8 @@ INSTALL_DIR="/opt/psychopy"
 STD_VENV_NAME="PsychoPy"
 DEV_VENV_NAME="PsychoPy-dev"
 VERIFY_SCRIPT="/usr/lib/devjam-science-tools/verify-venv-packages.py"
+# Optional, created by the administrator (not shipped, so not a conffile)
+OVERRIDE_FILE="/etc/devjam-science-tools/install-psychopy-opensesame.overrides"
 INSTALLER_URL="https://github.com/wieluk/psychopy_linux_installer/releases/latest/download/psychopy_linux_installer"
 DEV_GIT_BASE="https://github.com/dev-jam"
 # Dev environment: PsychoPy from the dev branch of github.com/psychopy/psychopy
@@ -40,11 +57,22 @@ TARGET_USER="${SUDO_USER:-${USER:-}}"
 
 # --- ARGUMENT PARSING ---
 MODE="standard"
+CLI_OVERRIDES=""
 for arg in "$@"; do
     case "$arg" in
         --dev) MODE="dev" ;;
+        --override=?*)
+            CLI_OVERRIDES="${CLI_OVERRIDES}${arg#--override=}
+"
+            ;;
+        --override|--override=)
+            echo "--override needs a value: --override=SPEC" >&2
+            echo "Use --help for usage." >&2
+            exit 1
+            ;;
         -h|--help)
-            sed -n '3,8p' "$0" | sed 's/^# \{0,1\}//'
+            # The usage block: from line 3 up to the first empty line
+            sed -n '3,/^$/p' "$0" | sed '/^$/d; s/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -78,13 +106,18 @@ done
 # The resolver therefore stays at sigmund 1.4.2 and pyqt_code_editor 1.2.0,
 # and the OpenSesame updater keeps offering an update that cannot install.
 
+# Package lists: comma-separated pip requirements. Every entry must name its
+# package by the rules in the usage text (a URL that is not a wheel gets
+# "name@"), so that --override can find it and verify-venv-packages.py can
+# check it.
+
 # Packages shared by the standard and the dev environment
 PKGS_COMMON="
 I2MC,
 PyQt6-WebEngine,
 fastnumbers,
 https://github.com/open-cogsci/opensesame-windows-build-scripts/raw/refs/heads/master/libs/expyriment-0.10.0+opensesame2-py3-none-any.whl,
-https://github.com/smathot/PyGaze/archive/refs/tags/release/0.8.8.tar.gz,
+python-pygaze@https://github.com/smathot/PyGaze/archive/refs/tags/release/0.8.8.tar.gz,
 opensesame-core,
 opensesame-extension-osweb,
 opensesame-extension-updater,
@@ -127,16 +160,17 @@ psychopy-titta-eyetracking
 
 # dev-jam plugins: git repositories (dev environment)
 # Note: the OpenSesame repo names use underscores (the PsychoPy ones dashes); no
-# branch is pinned, so HEAD of each repo's default branch is installed.
+# branch is pinned, so HEAD of each repo's default branch is installed. The
+# name before the @ is the distribution name, as in the PyPI list above.
 PKGS_PLUGINS_GIT="
-git+${DEV_GIT_BASE}/opensesame-plugin-audio_low_latency.git,
-git+${DEV_GIT_BASE}/opensesame-plugin-experiment_manager.git,
-git+${DEV_GIT_BASE}/opensesame-plugin-parallel_port_trigger.git,
-git+${DEV_GIT_BASE}/opensesame-plugin-radboudbox.git,
-git+${DEV_GIT_BASE}/opensesame-plugin-screenshot.git,
-git+${DEV_GIT_BASE}/opensesame-plugin-titta_eyetracking.git,
-git+${DEV_GIT_BASE}/psychopy-radboudbox.git,
-git+${DEV_GIT_BASE}/psychopy-titta-eyetracking.git
+opensesame-plugin-audio-low-latency@git+${DEV_GIT_BASE}/opensesame-plugin-audio_low_latency.git,
+opensesame-plugin-experiment-manager@git+${DEV_GIT_BASE}/opensesame-plugin-experiment_manager.git,
+opensesame-plugin-parallel-port-trigger@git+${DEV_GIT_BASE}/opensesame-plugin-parallel_port_trigger.git,
+opensesame-plugin-radboudbox@git+${DEV_GIT_BASE}/opensesame-plugin-radboudbox.git,
+opensesame-plugin-screenshot@git+${DEV_GIT_BASE}/opensesame-plugin-screenshot.git,
+opensesame-plugin-titta-eyetracking@git+${DEV_GIT_BASE}/opensesame-plugin-titta_eyetracking.git,
+psychopy-radboudbox@git+${DEV_GIT_BASE}/psychopy-radboudbox.git,
+psychopy-titta-eyetracking@git+${DEV_GIT_BASE}/psychopy-titta-eyetracking.git
 "
 
 # Join package lists into a single string without spaces or newlines for installer arguments
@@ -144,8 +178,67 @@ join_pkgs() {
     printf '%s,%s' "$1" "$2" | tr -d ' \n' | sed 's/,,*/,/g; s/^,//; s/,$//'
 }
 
-PKGS_STD_STRING=$(join_pkgs "$PKGS_COMMON" "$PKGS_PLUGINS_PYPI")
-PKGS_DEV_STRING=$(join_pkgs "$PKGS_COMMON" "$PKGS_PLUGINS_GIT")
+# Apply overrides to a package list: an override replaces the entry with the
+# same package name (compared in canonical form, PEP 503) and is appended
+# when no entry has that name; of two overrides for one package the last one
+# wins. The name rules are in the usage text; verify-venv-packages.py uses
+# the same rules. Fails on an override without a readable name or with a
+# comma (psychopy_linux_installer splits its package list on commas).
+# Arguments: comma-separated package list, newline-separated overrides
+apply_overrides() {
+    printf '%s\n' "$2" | awk -v list="$1" '
+        function canon(s) { s = tolower(s); gsub(/[-_.]+/, "-", s); return s }
+        function pkgname(s,   n) {
+            if (s ~ /^[A-Za-z0-9][A-Za-z0-9._-]*@/) { sub(/@.*/, "", s); return s }
+            sub(/#.*/, "", s)
+            if (s ~ /:\/\// && s ~ /\.whl$/) {
+                n = s; sub(/.*\//, "", n); sub(/-.*/, "", n)
+                return n
+            }
+            if (s ~ /:\/\// || s ~ /^(git\+|[.\/~])/) return ""
+            sub(/[[<>=!~;@].*/, "", s)
+            return (s ~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/) ? s : ""
+        }
+        NF {
+            if (index($0, ",")) {
+                print "ERROR: --override cannot contain a comma: " $0 > "/dev/stderr"
+                bad = 1; exit 1
+            }
+            n = canon(pkgname($0))
+            if (n == "") {
+                print "ERROR: no package name in override: " $0 > "/dev/stderr"
+                print "       Use name@<url> for a URL that is not a wheel." > "/dev/stderr"
+                bad = 1; exit 1
+            }
+            if (!(n in ov)) order[++k] = n
+            ov[n] = $0
+        }
+        END {
+            if (bad) exit 1
+            m = split(list, specs, ",")
+            out = ""
+            for (j = 1; j <= m; j++) {
+                s = specs[j]; c = canon(pkgname(s))
+                if (c != "" && c in ov) { s = ov[c]; used[c] = 1 }
+                out = out (out == "" ? "" : ",") s
+            }
+            for (j = 1; j <= k; j++)
+                if (!(order[j] in used)) out = out (out == "" ? "" : ",") ov[order[j]]
+            print out
+        }'
+}
+
+# Overrides: the file first, then the command line (the last one wins).
+# Whitespace is removed, as in the package lists.
+FILE_OVERRIDES=""
+if [ -r "$OVERRIDE_FILE" ]; then
+    FILE_OVERRIDES=$(sed '/^[[:space:]]*#/d; s/[[:space:]]//g; /^$/d' "$OVERRIDE_FILE")
+fi
+CLI_OVERRIDES=$(printf '%s' "$CLI_OVERRIDES" | sed 's/[[:space:]]//g; /^$/d')
+OVERRIDES=$(printf '%s\n%s\n' "$FILE_OVERRIDES" "$CLI_OVERRIDES" | sed '/^$/d')
+
+PKGS_STD_STRING=$(apply_overrides "$(join_pkgs "$PKGS_COMMON" "$PKGS_PLUGINS_PYPI")" "$OVERRIDES")
+PKGS_DEV_STRING=$(apply_overrides "$(join_pkgs "$PKGS_COMMON" "$PKGS_PLUGINS_GIT")" "$OVERRIDES")
 
 # Function to print visual banners/separators
 print_banner() {
@@ -199,6 +292,18 @@ else
     echo "2. PsychoPy Studio"
     echo "   - Location: ${INSTALL_DIR}/PsychoPy-studio"
     echo "   - WITHOUT additional packages"
+fi
+if [ -n "$OVERRIDES" ]; then
+    echo ""
+    echo "Overrides (replace the package of the same name above, or add it):"
+    if [ -n "$FILE_OVERRIDES" ]; then
+        echo "   - From ${OVERRIDE_FILE}:"
+        print_pkgs "$(printf '%s' "$FILE_OVERRIDES" | tr '\n' ',')"
+    fi
+    if [ -n "$CLI_OVERRIDES" ]; then
+        echo "   - From the command line:"
+        print_pkgs "$(printf '%s' "$CLI_OVERRIDES" | tr '\n' ',')"
+    fi
 fi
 echo ""
 echo "================================================================================"

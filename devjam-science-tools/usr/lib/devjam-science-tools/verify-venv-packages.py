@@ -16,6 +16,22 @@ def canonical(name):
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+def requirement_name(spec):
+    """Package name of one entry, by the rules of install-psychopy-opensesame.
+
+    name@<url> (PEP 508 direct reference) gives the name before the @, a
+    wheel URL the name in its file name, a plain requirement its name.
+    """
+    match = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)\s*@", spec)
+    if match:
+        return match.group(1)
+    url = spec.split("#", 1)[0]
+    if "://" in url and url.endswith(".whl"):
+        # Wheel file name: <name>-<version>-...
+        return url.rsplit("/", 1)[-1].split("-", 1)[0]
+    return re.split(r"[<>=!~\[;@ ]", spec, maxsplit=1)[0]
+
+
 installed = {}
 for dist in distributions():
     name = dist.metadata["Name"]
@@ -24,15 +40,7 @@ for dist in distributions():
 
 missing = []
 for spec in filter(None, sys.argv[1].split(",")):
-    if "PyGaze" in spec:
-        name = "python-pygaze"
-    elif spec.startswith("git+"):
-        name = spec.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
-    elif spec.startswith(("http://", "https://")):
-        # Wheel file name: <name>-<version>-...
-        name = spec.rsplit("/", 1)[-1].split("-", 1)[0]
-    else:
-        name = re.split(r"[<>=!~\[; ]", spec, maxsplit=1)[0]
+    name = requirement_name(spec)
     if canonical(name) not in installed:
         missing.append(name)
 

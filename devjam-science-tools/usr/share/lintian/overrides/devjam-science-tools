@@ -3,3 +3,7 @@ devjam-science-tools: desktop-command-not-in-package *
 
 # Man pages are not written yet; docs/man-pages.md lists which commands need one.
 devjam-science-tools: no-manual-page *
+
+# False positive: "function" and "[[" are in the awk program of
+# apply_overrides (an awk function and a regular expression), not shell code.
+devjam-science-tools: bash-term-in-posix-shell * [usr/bin/install-psychopy-opensesame:*]
