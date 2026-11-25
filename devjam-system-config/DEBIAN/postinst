@@ -19,7 +19,12 @@ case "$1" in
 		if command -v systemctl >/dev/null 2>&1; then
 			systemctl daemon-reload || true
 		fi
-        ;;
+
+		# Regenerate grub.cfg for the GRUB drop-in
+		if [ -e /boot/grub/grub.cfg ] && command -v update-grub >/dev/null 2>&1; then
+			update-grub || true
+		fi
+		;;
 esac
 
 exit 0

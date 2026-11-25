@@ -12,4 +12,5 @@ Description: Generic configs by devjam
  ~/.bash_aliases together with ~/.config/bashrc.d, Geany defaults,
  high-quality PipeWire resampling, TRIM/discard for SSDs and LUKS
  volumes, storage tuning, a shorter stop timeout for systemd user
- services, and switch-io to choose an I/O scheduler preset.
+ services, switch-io to choose an I/O scheduler preset, and a GRUB
+ drop-in that makes the newest Liquorix kernel the top-level entry.

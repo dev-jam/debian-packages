@@ -3,3 +3,4 @@
 /etc/su-to-rootrc
 /etc/bashrc.d/history.bashrc
 /etc/bashrc.d/hstr.bashrc
+/etc/default/grub.d/liquorix-top-level.cfg
