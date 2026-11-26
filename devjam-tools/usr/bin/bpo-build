@@ -74,6 +74,13 @@ FROM_BACKPORTS=""
 # in it (not recursively).
 EXTRA_PACKAGES=()
 
+# Whether to skip the Architecture: all packages (sbuild --no-arch-all).
+# Useful when only an arch-all package fails to build on trixie and is not
+# needed, e.g. the Sphinx documentation package python-pil-doc of a pillow
+# backport, while python3-pil and python3-pil.imagetk (arch any) are.
+# Off by default -- turn on with --no-arch-all.
+NO_ARCH_ALL=0
+
 # Store an --extra-package path as an absolute path (the scripts cd
 # around, and bpo-resume may run from elsewhere). A leading "~/" is
 # expanded here, because bash does not expand it after "--option=".
@@ -149,6 +156,10 @@ while [[ $# -gt 0 ]]; do
             add_extra_package "${1#*=}"
             shift
             ;;
+        --no-arch-all)
+            NO_ARCH_ALL=1
+            shift
+            ;;
         --)
             shift
             packages+=("$@")
@@ -156,7 +167,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -*)
             echo "Error: Unknown option $1" >&2
-            echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] [--extra-package=PATH]... <package1> [<package2> ...]" >&2
+            echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] [--extra-package=PATH]... [--no-arch-all] <package1> [<package2> ...]" >&2
             exit 1
             ;;
         *)
@@ -167,7 +178,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Check if at least one package argument is provided
-[ "${#packages[@]}" -eq 0 ] && { echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] [--extra-package=PATH]... <package1> [<package2> ...]" >&2; exit 1; }
+[ "${#packages[@]}" -eq 0 ] && { echo "Usage: $0 [--stable|--testing|--unstable|--experimental] [--apt|--dgit] [--revision=N] [--pause] [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] [--extra-package=PATH]... [--no-arch-all] <package1> [<package2> ...]" >&2; exit 1; }
 
 # Tool check specific to the chosen fetch method
 case "$FETCH_METHOD" in
@@ -189,6 +200,7 @@ echo "Fetch method: $FETCH_METHOD"
 [ -n "$ALLOW_UNSTABLE" ] && echo "From unstable (only): $ALLOW_UNSTABLE"
 [ -n "$FROM_BACKPORTS" ] && echo "From ${BUILD_SUITE}-backports (pinned): $FROM_BACKPORTS"
 for extra in "${EXTRA_PACKAGES[@]}"; do echo "Extra package(s): $extra"; done
+[ "$NO_ARCH_ALL" -eq 1 ] && echo "Architecture: all packages: skipped"
 echo "Creating deb packages for: ${packages[*]}"
 
 success_count=0
@@ -382,6 +394,8 @@ for package in "${packages[@]}"; do
         sbuild_args+=(--extra-package="$extra")
     done
 
+    [ "$NO_ARCH_ALL" -eq 1 ] && sbuild_args+=(--no-arch-all)
+
     # Remember --allow-unstable one directory *above* the source tree
     # (not inside it, so it never ends up in the actual .dsc/.diff.gz) --
     # this is what lets "bpo-resume" pick the same pin back up later
@@ -403,6 +417,12 @@ for package in "${packages[@]}"; do
         printf '%s\n' "${EXTRA_PACKAGES[@]}" > ../.bpo-extra-packages
     else
         rm -f ../.bpo-extra-packages
+    fi
+    # Same for --no-arch-all (the file only exists when it is on)
+    if [ "$NO_ARCH_ALL" -eq 1 ]; then
+        : > ../.bpo-no-arch-all
+    else
+        rm -f ../.bpo-no-arch-all
     fi
 
     if sbuild "${sbuild_args[@]}" .; then

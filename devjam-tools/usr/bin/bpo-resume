@@ -8,7 +8,7 @@
 # debian/ folder, use sbuild-local instead.
 #
 # Usage:
-#   bpo-resume [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] [--extra-package=PATH]... [--revision=N] [package_hint]
+#   bpo-resume [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] [--extra-package=PATH]... [--no-arch-all|--arch-all] [--revision=N] [package_hint]
 #
 # Run from:
 #   - the extracted source directory itself (has debian/changelog), or
@@ -51,6 +51,10 @@ FROM_BACKPORTS=""
 # in it (not recursively).
 EXTRA_PACKAGES=()
 
+# Whether to skip the Architecture: all packages (sbuild --no-arch-all).
+# Remembered from bpo-build --no-arch-all; --arch-all turns it off again.
+NO_ARCH_ALL=0
+
 # If set (via --revision=N), overrides the backport build number (the
 # digits after the last "+" in the ~bpoXX+N suffix) via dch --newversion
 # before rebuilding -- e.g. after a --pause edit you want a new build
@@ -61,6 +65,7 @@ package_hint=""
 allow_unstable_set=0
 from_backports_set=0
 extra_packages_set=0
+no_arch_all_set=0
 
 # Store an --extra-package path as an absolute path (the scripts cd
 # around, and bpo-resume may run from elsewhere). A leading "~/" is
@@ -96,6 +101,16 @@ while [[ $# -gt 0 ]]; do
             extra_packages_set=1
             shift
             ;;
+        --no-arch-all)
+            NO_ARCH_ALL=1
+            no_arch_all_set=1
+            shift
+            ;;
+        --arch-all)
+            NO_ARCH_ALL=0
+            no_arch_all_set=1
+            shift
+            ;;
         --revision=*)
             REVISION="${1#*=}"
             if ! [[ "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
@@ -110,7 +125,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -*)
             echo "Error: Unknown option $1" >&2
-            echo "Usage: $0 [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] [--extra-package=PATH]... [--revision=N] [package_hint]" >&2
+            echo "Usage: $0 [--allow-unstable=PKG[,PKG...]] [--from-backports=PKG[,PKG...]] [--extra-package=PATH]... [--no-arch-all|--arch-all] [--revision=N] [package_hint]" >&2
             exit 1
             ;;
         *)
@@ -202,6 +217,12 @@ if [ "$extra_packages_set" -eq 0 ] && [ -f "$state_file" ]; then
         echo "(picked up --extra-package=$extra from the earlier bpo-build run)"
     done
 fi
+# Same for --no-arch-all (--no-arch-all or --arch-all here overrides it)
+state_file="$(dirname "$src_dir")/.bpo-no-arch-all"
+if [ "$no_arch_all_set" -eq 0 ] && [ -f "$state_file" ]; then
+    NO_ARCH_ALL=1
+    echo "(picked up --no-arch-all from the earlier bpo-build run)"
+fi
 
 cd "$src_dir"
 
@@ -287,11 +308,14 @@ for extra in "${EXTRA_PACKAGES[@]}"; do
     sbuild_args+=(--extra-package="$extra")
 done
 
+[ "$NO_ARCH_ALL" -eq 1 ] && sbuild_args+=(--no-arch-all)
+
 echo "Source:    $src_dir"
 echo "Build-dir: $home_dir"
 [ -n "$REVISION" ] && echo "Backport revision: ~bpoXX+$REVISION"
 [ -n "$ALLOW_UNSTABLE" ] && echo "From unstable (only): $ALLOW_UNSTABLE"
 [ -n "$FROM_BACKPORTS" ] && echo "From ${BUILD_SUITE}-backports (pinned): $FROM_BACKPORTS"
 for extra in "${EXTRA_PACKAGES[@]}"; do echo "Extra package(s): $extra"; done
+[ "$NO_ARCH_ALL" -eq 1 ] && echo "Architecture: all packages: skipped"
 
 sbuild "${sbuild_args[@]}" .
