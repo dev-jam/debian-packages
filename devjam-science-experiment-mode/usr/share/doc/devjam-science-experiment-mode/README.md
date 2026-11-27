@@ -20,6 +20,14 @@ Three packages work together:
 `devjam-system-config-lowlatency` gives the `audio` group the real-time
 limits that OpenSesame with real-time priority needs.
 
+`devjam-science-opensesame-psychopy` starts the OpenSesame of the PsychoPy
+environment in `/opt/psychopy` (`install-psychopy-opensesame`). For the
+OpenSesame installed with apt (`python3-opensesame`, in the dev-jam
+component `experimentation`), `devjam-science-opensesame-rt` does the same.
+What this manual says about OpenSesame (RT) applies to both; the names that
+differ are in
+[OpenSesame installed with apt](#opensesame-installed-with-apt).
+
 Contents: [Setting up](#setting-up-once-per-computer) ·
 [Running an experiment](#running-an-experiment) ·
 [Checking](#checking-that-it-works) · [Changing the setup](#changing-the-setup) ·
@@ -39,6 +47,9 @@ the packages ship them, and the commands below change them for you.
    sudo apt install devjam-science-experiment-mode \
        devjam-science-opensesame-psychopy devjam-system-config-lowlatency
    ```
+
+   For the OpenSesame installed with apt, `devjam-science-opensesame-rt`
+   instead of `devjam-science-opensesame-psychopy` (or both).
 
 2. **Check which CPUs share a core.** A preset should isolate whole cores:
    an isolated CPU still shares its core with its SMT sibling.
@@ -100,7 +111,8 @@ the packages ship them, and the commands below change them for you.
 
 1. Boot `Debian GNU/Linux - Experiment mode, 6 isolated CPUs (2-7)`, or
    another preset from `Experiment mode, other CPU presets`.
-2. Start **OpenSesame 4.1 with PsychoPy (RT Priority)** from the menu.
+2. Start **OpenSesame 4.1 with PsychoPy (RT Priority)** from the menu
+   (**OpenSesame (RT Priority)** for the OpenSesame installed with apt).
    OpenSesame then runs with real-time priority (SCHED_RR 40) on the
    isolated CPUs of this boot. It follows the preset you chose in GRUB.
 3. A USB audio interface can be plugged in before or after the boot: its
@@ -145,6 +157,7 @@ check-rt-processes -1   # real-time threads with their CPUs (-a: also default ke
 usb-affinity            # USB controllers, their IRQs and the devices behind them
 journalctl -b -u auto-pin-audio.service   # which sound card IRQ went to which CPU
 manage-opensesame-affinity --show         # CPU setting of OpenSesame (RT)
+manage-opensesame-rt-affinity --show      # the same for the OpenSesame installed with apt
 ```
 
 ## Changing the setup
@@ -156,7 +169,7 @@ manage-opensesame-affinity --show         # CPU setting of OpenSesame (RT)
 | Extra kernel parameters in experiment mode | `GRUB_EXPERIMENT_MODE_DEFAULT`, then `sudo update-grub` |
 | Kernel of the top level entry | Newest Liquorix kernel, else newest kernel; `GRUB_TOP_LEVEL=/boot/vmlinuz-...` in `/etc/default/grub` chooses another one (GRUB 2.12 or later) |
 | Let other processes and IRQs use the isolated CPUs again | `sudo systemctl disable experiment-mode-cpus.service` (from the next boot), or `sudo /usr/lib/devjam/experiment-mode/confine-cpus --undo` (now: services and new IRQs; new logins; existing IRQs stay where they are) |
-| Fixed CPUs for OpenSesame (RT) | `manage-opensesame-affinity 2-5` (you), `--system 2-5` (all users); `--disable` goes back to the isolated CPUs |
+| Fixed CPUs for OpenSesame (RT) | `manage-opensesame-affinity 2-5` (you), `--system 2-5` (all users); `--disable` goes back to the isolated CPUs; `manage-opensesame-rt-affinity` with the same options for the OpenSesame installed with apt |
 | USB controller of a button box on an isolated CPU | `usb-affinity usb1 2` (until the next reboot; `usb-affinity` lists the buses) |
 | rtirq only in experiment mode, or always | `sudo switch-rtirq experiment` / `sudo switch-rtirq always` |
 | Priorities of rtirq | `/etc/rtirq.conf` (see `verify-rtirq`) |
@@ -181,7 +194,7 @@ systemd (ConditionKernelCommandLine on experiment_mode=1)
    |   rtirq-resume.service    (always, or only in experiment mode: switch-rtirq)
    v
 Menu entry "OpenSesame ... (RT Priority)"
-   systemctl --user start opensesame-psychopy-rt.service
+   systemctl --user start opensesame-psychopy-rt.service  (apt: opensesame-rt.service)
    -> SCHED_RR priority 40, on CPUs 2-7 (the isolated CPUs of this boot)
 ```
 
@@ -318,13 +331,28 @@ trusted (see [Other processes](#other-processes)).
 or, with `--system`, in `/etc/systemd/user/...`. A user drop-in replaces the
 system one. Such fixed CPUs apply in normal mode too.
 
+### OpenSesame installed with apt
+
+`devjam-science-opensesame-rt` works the same way for `/usr/bin/opensesame`
+from `python3-opensesame`. Its names:
+
+| venv (`devjam-science-opensesame-psychopy`) | apt (`devjam-science-opensesame-rt`) |
+| --- | --- |
+| Menu entry **OpenSesame 4.1 with PsychoPy (RT Priority)** | **OpenSesame (RT Priority)** |
+| `opensesame-psychopy-rt.service` | `opensesame-rt.service` |
+| `opensesame-psychopy-launch` | `opensesame-rt-launch` |
+| `manage-opensesame-affinity` | `manage-opensesame-rt-affinity` |
+
+Both packages can be installed together; each has its own service, so
+fixed CPUs set for one do not apply to the other.
+
 ## Troubleshooting
 
 | Problem | Cause and fix |
 | --- | --- |
 | No experiment mode entries in GRUB | `ENABLE_EXPERIMENT_MODE` is not `"true"`, or `update-grub` did not run; check the `Experiment mode:` lines in its output |
 | A preset is missing | `update-grub` skipped it: CPU 0, a CPU that does not exist, or an invalid list |
-| OpenSesame (RT) does not start | `journalctl --user -u opensesame-psychopy-rt`; usually the user has no real-time limit: add the user to `audio` (setup step 7) and log in again |
+| OpenSesame (RT) does not start | `journalctl --user -u opensesame-psychopy-rt` (apt: `-u opensesame-rt`); usually the user has no real-time limit: add the user to `audio` (setup step 7) and log in again |
 | OpenSesame (RT) runs on the wrong CPUs | `check-rt-processes -1` shows its CPUs (column CPUS); `manage-opensesame-affinity --show` shows a drop-in with fixed CPUs, which wins; `--disable` (and `--system --disable`) removes it. Started OpenSesame before the 1.10-1 update? Close it and start it again |
 | `check-isolation` warns that irqbalance runs | `systemctl cat irqbalance.service` should show the drop-in `disable-experiment.conf`; was the computer booted with `experiment_mode=1`? |
 | "no threaded IRQs" | rtirq has nothing to prioritize; add `threadirqs` (setup step 4) |
@@ -380,6 +408,7 @@ system one. Such fixed CPUs apply in normal mode too.
 | `verify-rtirq` | rtirq | The priorities rtirq set, and whether IRQ threads exist |
 | `check-rt-processes [-1] [SECONDS]` | rtirq | All real-time threads |
 | `manage-opensesame-affinity` | opensesame-psychopy | CPUs of OpenSesame (RT) |
+| `manage-opensesame-rt-affinity` | opensesame-rt | CPUs of OpenSesame (RT) installed with apt |
 
 | File | Purpose |
 | --- | --- |
@@ -393,6 +422,8 @@ system one. Such fixed CPUs apply in normal mode too.
 | `/etc/rtirq.conf` | rtirq priorities (diverted by devjam-system-config-rtirq) |
 | `/usr/lib/systemd/user/opensesame-psychopy-rt.service` | OpenSesame with real-time priority |
 | `~/.config/systemd/user/opensesame-psychopy-rt.service.d/cpu-affinity.conf` | Made by `manage-opensesame-affinity` (`/etc/systemd/user/...` with `--system`) |
+| `/usr/lib/systemd/user/opensesame-rt.service` | OpenSesame installed with apt, with real-time priority |
+| `~/.config/systemd/user/opensesame-rt.service.d/cpu-affinity.conf` | Made by `manage-opensesame-rt-affinity` (`/etc/systemd/user/...` with `--system`) |
 
 ## Sources
 
