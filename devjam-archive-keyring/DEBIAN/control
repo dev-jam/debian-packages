@@ -1,10 +1,12 @@
 Package: devjam-archive-keyring
-Version: 1.42-3
+Version: 1.43-1
 Section: misc
 Priority: optional
 Architecture: all
 Maintainer: Bob Rosbag <debian@bobrosbag.nl>
-Description: Signing key for the dev-jam apt repository
- OpenPGP key that signs the dev-jam apt repository
- (https://dev-jam.github.io/debian/), installed in /usr/share/keyrings
- for use with Signed-By in deb822 .sources files.
+Description: Signing keys for the dev-jam apt repositories
+ OpenPGP keys that sign the dev-jam apt repository
+ (https://dev-jam.github.io/debian/, dev-jam.asc) and the dev-jam
+ external repository (https://dev-jam.github.io/debian-external/,
+ dev-jam-external.asc), installed in /usr/share/keyrings for use with
+ Signed-By in deb822 .sources files.

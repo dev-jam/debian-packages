@@ -16,7 +16,7 @@ The packages in the *Science / lab setups* section are published in the `science
 
 | Package | Purpose |
 | --- | --- |
-| `devjam-archive-keyring` | Signing key for the dev-jam apt repository |
+| `devjam-archive-keyring` | Signing keys for the dev-jam apt repositories (main and external) |
 | `devjam-archive-keyring-legacy` | Legacy variant of the keyring package |
 | `devjam-external-keyring` | Signing keys for the external apt repositories |
 | `devjam-external-keyring-legacy` | Legacy variant of the external keyring package |
