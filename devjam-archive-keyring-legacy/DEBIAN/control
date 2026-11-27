@@ -7,6 +7,6 @@ Maintainer: Bob Rosbag <debian@bobrosbag.nl>
 Description: Signing keys for the dev-jam apt repositories (legacy)
  OpenPGP keys that sign the dev-jam apt repository and the dev-jam
  external repository, installed in /etc/apt/trusted.gpg.d for Debian
- Live images that still use sources.list without Signed-By. Use devjam-archive-keyring on other
- systems; this package will be dropped once Debian Live handles
- deb822 .sources files.
+ Live images that still use sources.list without Signed-By. Use
+ devjam-archive-keyring on other systems; this package will be dropped
+ once Debian Live handles deb822 .sources files.
