@@ -92,6 +92,7 @@ The packages in the *Science / lab setups* section are published in the `science
 | `devjam-science-experiment-mode-rtirq` | Transitional package for `devjam-science-experiment-mode` (split into it and `devjam-system-config-rtirq`) |
 | `devjam-science-opensesame-psychopy` | Settings and launch scripts for OpenSesame and PsychoPy, OpenSesame with real-time priority on the isolated CPUs of experiment mode |
 | `devjam-science-opensesame-psychopy-dev` | The same launchers for the PsychoPy dev environment (`install-psychopy-opensesame --dev`), for testing |
+| `devjam-science-opensesame-rt` | OpenSesame from the `python3-opensesame` package with real-time priority on the isolated CPUs of experiment mode; in the dev-jam/debian component `experimentation` |
 | `devjam-science-tools-matlab` | MATLAB (and Psychtoolbox) launchers and KDE service menus |
 | `devjam-science-kde-servicemenus` | KDE service menus for science, e.g. packing OpenSesame experiment folders into `.osexp` |
 | `devjam-science-wallpapers` | CLS wallpapers for normal and experiment mode |

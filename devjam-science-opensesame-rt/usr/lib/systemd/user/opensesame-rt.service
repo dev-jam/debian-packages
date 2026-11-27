@@ -1,0 +1,24 @@
+[Unit]
+Description=OpenSesame (with RT priority)
+# Started by the "OpenSesame (RT Priority)" desktop entry.
+
+[Service]
+ExecStart=/usr/bin/opensesame-rt-launch
+# In experiment mode OpenSesame runs on the isolated CPUs of the boot (see
+# opensesame-rt-launch). manage-opensesame-rt-affinity sets fixed CPUs
+# instead.
+Environment=OPENSESAME_CPUS=isolated
+CPUSchedulingPolicy=rr
+CPUSchedulingPriority=40
+# The user manager can only use the user's own limits:
+# devjam-system-config-lowlatency gives the audio group rtprio 95 and
+# unlimited memlock. Without a real-time limit the policy cannot be set and
+# the service does not start (journalctl --user -u opensesame-rt).
+LimitRTPRIO=95
+LimitMEMLOCK=infinity
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

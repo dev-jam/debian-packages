@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=OpenSesame (RT Priority)
+GenericName=Experiment Builder
+Comment=Graphical experiment builder for the social sciences, started with real-time priority
+Exec=systemctl --user start opensesame-rt
+Icon=opensesame
+Terminal=false
+Categories=Development;IDE;Science;Education;
+Keywords=opensesame;experiment;psychology;stimulus;timing;realtime;rt;lab;
+StartupNotify=false

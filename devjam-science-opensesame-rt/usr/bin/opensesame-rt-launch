@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Starts OpenSesame from the python3-opensesame package for
+# opensesame-rt.service (real-time priority).
+#
+# With OPENSESAME_CPUS=isolated (set by opensesame-rt.service), OpenSesame
+# runs on the CPUs isolated with isolcpus= in experiment mode, so it follows
+# the CPU preset chosen in the GRUB menu. A CPUAffinity= of the service (set
+# with manage-opensesame-rt-affinity) wins. The inherited affinity says
+# nothing: the user service manager can have every CPU in it.
+OPENSESAME="/usr/bin/opensesame"
+SERVICE="opensesame-rt.service"
+
+if [[ ! -x "$OPENSESAME" ]]; then
+    echo "Error: $OPENSESAME not found" >&2
+    echo "       Install it with: sudo apt-get install python3-opensesame" >&2
+    exit 1
+fi
+
+# The inline_script editor (pyqt_code_editor) lints with Ruff, which writes a
+# .ruff_cache directory next to the experiment. The cache gives no speed gain
+# for scripts this small, so it is off. Set RUFF_NO_CACHE=false to keep it.
+export RUFF_NO_CACHE="${RUFF_NO_CACHE:-true}"
+
+if [[ ${OPENSESAME_CPUS:-} == isolated ]]; then
+    isolated=$(cat /sys/devices/system/cpu/isolated 2>/dev/null)
+    fixed=$(systemctl --user show -p CPUAffinity --value "$SERVICE" 2>/dev/null)
+    if [[ -n $isolated && -z $fixed ]]; then
+        exec taskset -c "$isolated" "$OPENSESAME" "$@"
+    fi
+fi
+
+exec "$OPENSESAME" "$@"

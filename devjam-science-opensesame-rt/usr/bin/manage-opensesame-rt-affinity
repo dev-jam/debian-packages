@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# Copyright (C) 2025-2026 Bob Rosbag <mail@bobrosbag.nl>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Sets the CPUs of OpenSesame from python3-opensesame, started with real-time
+# priority (opensesame-rt.service, a user service), with a drop-in:
+#   user:   ~/.config/systemd/user/opensesame-rt.service.d/cpu-affinity.conf
+#   system: /etc/systemd/user/opensesame-rt.service.d/cpu-affinity.conf
+# The user drop-in replaces the system one (same file name). Without a
+# drop-in OpenSesame runs on the isolated CPUs in experiment mode and on the
+# normal CPUs otherwise.
+set -euo pipefail
+
+SERVICE="opensesame-rt.service"
+OVERRIDE="cpu-affinity.conf"
+SYS_DIR="/etc/systemd/user/$SERVICE.d"
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    BOLD=$'\e[1m' GREEN=$'\e[32m' YELLOW=$'\e[33m' RED=$'\e[31m' GRAY=$'\e[90m' RESET=$'\e[0m'
+else
+    BOLD="" GREEN="" YELLOW="" RED="" GRAY="" RESET=""
+fi
+
+usage() {
+    cat <<EOF
+Usage: ${0##*/} [--user|--system] CPU-LIST   set the CPUs (e.g. 2-5 or 2,3)
+       ${0##*/} [--user|--system] --disable  remove the setting
+       ${0##*/} --show                       show the settings
+--user (default) applies to you, --system to all users (uses sudo).
+Without a setting OpenSesame follows the isolated CPUs of experiment mode.
+EOF
+    exit "${1:-0}"
+}
+
+# The user running this script, also when --system re-ran it with sudo.
+if [[ $EUID -eq 0 && -n "${SUDO_USER:-}" ]]; then
+    REAL_USER=$SUDO_USER
+elif [[ $EUID -eq 0 ]]; then
+    echo "${RED}Error:${RESET} run this as a normal user; --system uses sudo itself." >&2
+    exit 1
+else
+    REAL_USER=$(id -un)
+fi
+USER_DIR="$(getent passwd "$REAL_USER" | cut -d: -f6)/.config/systemd/user/$SERVICE.d"
+
+# Runs systemctl --user for the real user, also from sudo.
+user_systemctl() {
+    if [[ $EUID -eq 0 ]]; then
+        systemctl --user -M "$REAL_USER@" "$@"
+    else
+        systemctl --user "$@"
+    fi
+}
+
+show_file() {
+    local label="$1" file="$2/$OVERRIDE"
+    if [[ -f $file ]]; then
+        echo "$label ${GRAY}$file${RESET}"
+        grep -E '^(CPUAffinity|Environment)=' "$file" | sed "s/^/    $GREEN/; s/\$/$RESET/" || true
+    else
+        echo "$label ${GRAY}none ($file)${RESET}"
+    fi
+}
+
+show() {
+    echo "${BOLD}CPU setting of $SERVICE${RESET}"
+    show_file "System drop-in:" "$SYS_DIR"
+    show_file "User drop-in:  " "$USER_DIR"
+    [[ -f $USER_DIR/$OVERRIDE && -f $SYS_DIR/$OVERRIDE ]] &&
+        echo "${YELLOW}The user drop-in replaces the system drop-in.${RESET}"
+    if [[ ! -f $USER_DIR/$OVERRIDE && ! -f $SYS_DIR/$OVERRIDE ]]; then
+        echo "In effect: the isolated CPUs ($(grep . /sys/devices/system/cpu/isolated 2>/dev/null || echo "none, so the normal CPUs"))"
+    fi
+    if user_systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
+        echo "${YELLOW}OpenSesame (RT) is running: a change applies when it is started again.${RESET}"
+    fi
+}
+
+# Writes or removes the drop-in, then reloads the user's service manager.
+apply() {
+    local dir="$1" cpus="$2"
+    if [[ -n $cpus ]]; then
+        mkdir -p "$dir"
+        # The empty OPENSESAME_CPUS stops the launcher from following the
+        # isolated CPUs, so CPUAffinity applies as set.
+        printf '[Service]\nCPUAffinity=%s\nEnvironment=OPENSESAME_CPUS=\n' "$cpus" > "$dir/$OVERRIDE"
+        echo "${GREEN}OpenSesame (RT) runs on CPUs $cpus.${RESET}"
+    elif [[ -f $dir/$OVERRIDE ]]; then
+        rm -f "$dir/$OVERRIDE"
+        rmdir "$dir" 2>/dev/null || true
+        echo "${GREEN}Setting removed.${RESET}"
+    else
+        echo "No setting to remove."
+    fi
+    if ! user_systemctl daemon-reload 2>/dev/null; then
+        echo "${YELLOW}Run 'systemctl --user daemon-reload' or log in again to apply it.${RESET}"
+    fi
+    [[ $dir == "$SYS_DIR" ]] && echo "${GRAY}Other users: applies after 'systemctl --user daemon-reload' or a new login.${RESET}"
+    echo
+    show
+}
+
+MODE=user ACTION=set CPUS=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --user) MODE=user ;;
+        --system) MODE=system ;;
+        --show) ACTION=show ;;
+        --disable) ACTION=disable ;;
+        -h|--help) usage ;;
+        -*) usage 2 >&2 ;;
+        *) [[ -z $CPUS ]] || usage 2 >&2; CPUS=$1 ;;
+    esac
+    shift
+done
+
+case "$ACTION" in
+    show) show; exit 0 ;;
+    disable) CPUS="" ;;
+    set)
+        [[ -n $CPUS ]] || usage 2 >&2
+        if [[ ! $CPUS =~ ^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$ ]]; then
+            echo "${RED}Error:${RESET} invalid CPU list '$CPUS'" >&2
+            exit 2
+        fi
+        max=$(($(nproc --all) - 1))
+        for n in $(tr ',-' '  ' <<< "$CPUS"); do
+            if ((n > max)); then
+                echo "${RED}Error:${RESET} CPU $n does not exist (CPUs 0-$max)" >&2
+                exit 2
+            fi
+        done
+        ;;
+esac
+
+if [[ $MODE == system ]]; then
+    if [[ $EUID -ne 0 ]]; then
+        if [[ $ACTION == disable ]]; then exec sudo "$0" --system --disable; fi
+        exec sudo "$0" --system "$CPUS"
+    fi
+    apply "$SYS_DIR" "$CPUS"
+elif [[ $EUID -eq 0 ]]; then
+    # The user drop-in would end up owned by root in the user's home.
+    echo "${RED}Error:${RESET} run this without sudo; only --system needs root." >&2
+    exit 1
+else
+    apply "$USER_DIR" "$CPUS"
+fi

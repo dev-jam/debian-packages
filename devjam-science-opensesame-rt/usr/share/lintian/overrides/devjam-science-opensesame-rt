@@ -1,0 +1,6 @@
+# The desktop entry starts the user service with systemctl (systemd), and the
+# service runs opensesame from python3-opensesame: both come from other packages.
+devjam-science-opensesame-rt: desktop-command-not-in-package *
+
+# Man pages are not written yet; docs/man-pages.md lists which commands need one.
+devjam-science-opensesame-rt: no-manual-page *
